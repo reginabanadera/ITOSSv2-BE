@@ -1,0 +1,34 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+venv/
+itoss_env/
+ENV/
+
+# Environment variables
+.env
+.env.*
+app/.env
+
+# Secret keys
+*.key
+master.key
+
+# Python build files
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# VSCode settings
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
