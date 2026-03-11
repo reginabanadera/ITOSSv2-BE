@@ -6,7 +6,7 @@ from app.handlers.configuration.emailAddress_handler import fetchAllEmailAddress
 from app.handlers.configuration.vwAtKWE_handler import fetchAllEmployees
 from app.handlers.configuration.groupEmail_handler import fetchAllGroupEmail, createNewGroup, editGroup
 from app.handlers.configuration.groupMember_handler import fetchAllGroupMembers, addGroupMember, deleteMember
-from app.handlers.configuration.ticketCateg_handler import fetchAllTicketCateg
+from app.handlers.configuration.ticketCateg_handler import fetchAllTicketCateg, createTicketCateg
 
 config_bp = Blueprint("config", __name__)
 
@@ -44,4 +44,5 @@ config_bp.route("/delMember/<id>", methods=["DELETE"])(deleteMember)
 
 #TICKET CATEGORIES
 config_bp.route("/getTicketCateg", methods=["GET"])(fetchAllTicketCateg) 
+config_bp.route("/createTicketCateg", methods=["POST"])(createTicketCateg)
 

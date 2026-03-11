@@ -11,7 +11,7 @@ class TicketCategory(db.Model):
 
     SystemId = db.Column(db.Integer, primary_key=True, nullable=False)
     Name = db.Column(db.String(70), nullable=False)
-    ParentId = db.Column(db.Integer, nullable=False)
+    ParentId = db.Column(db.Integer, nullable=True)
     DateCreated = db.Column(db.DateTime, default=lambda: datetime.now(philippines_tz))
     CreatedBy = db.Column(db.String(50), nullable=True)
     DateModified = db.Column(db.String(50), nullable=True)
