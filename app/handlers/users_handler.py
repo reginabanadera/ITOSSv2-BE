@@ -7,3 +7,7 @@ from app.services.jwt_validator import token_required
 def fetchUser(id):
     user = Users.query.filter(Users.EmployeeId == id).first()
     return (jsonify(user.to_dict()))
+
+
+def testing():
+    return "API is working!"

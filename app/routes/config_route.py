@@ -1,5 +1,5 @@
 from flask import Blueprint
-from app.handlers.users_handler import fetchUser
+from app.handlers.users_handler import fetchUser, testing
 from app.handlers.configuration.systemProfile_handler import fetchAllSystems, createNewProfile, updateProfile
 from app.handlers.configuration.dbColumns_handler import fetchAllDBColumns, UpdateDBColumn, refetchDBColumns
 from app.handlers.configuration.emailAddress_handler import fetchAllEmailAddress, UpdateEmailDetail
@@ -9,6 +9,9 @@ from app.handlers.configuration.groupMember_handler import fetchAllGroupMembers,
 from app.handlers.configuration.ticketCateg_handler import fetchAllTicketCateg, createTicketCateg
 
 config_bp = Blueprint("config", __name__)
+
+#TESTING API
+config_bp.route("/test", methods=["GET"])(testing)
 
 #USER API
 config_bp.route("/getUserProfile/<id>", methods=["GET"])(fetchUser)
