@@ -14,6 +14,10 @@ ENV/
 .env.*
 app/.env
 
+# LOGS
+app/logs
+app/uploads 
+
 # Secret keys
 *.key
 master.key

@@ -6,6 +6,8 @@ from flask import jsonify, request, g
 from app.services.jwt_validator import token_required
 from datetime import datetime
 import pytz
+import json
+from sqlalchemy import text
 # Philippine timezone
 ph_tz = pytz.timezone("Asia/Manila")
 
@@ -22,7 +24,7 @@ def fetchAllTicketCateg():
 
         if not categs:
             return jsonify({"error": "No ticket categories found"}), 404  # Not Found is more appropriate
-
+     
         return jsonify([categ.to_dict() for categ in categs]), 200
 
     except Exception as e:
@@ -39,12 +41,14 @@ def createTicketCateg():
 
         name = data.get("name")
         parent_id = data.get("ParentId")
+        inhouse = data.get("Inhouse")
+        description = data.get("Description")
         custom_fields = data.get("CustomFields", [])
         approvers = data.get("ApproverLevel", [])
         current_user = g.payload['username']
 
         #CreateCategory 
-        category = TicketCategory(Name=name, ParentId=parent_id, CreatedBy=current_user)
+        category = TicketCategory(Name=name, ParentId=parent_id, Inhouse=inhouse, Description=description, CreatedBy=current_user)
 
         db.session.add(category)
         db.session.flush()  # get category.SystemId
@@ -52,16 +56,24 @@ def createTicketCateg():
         category_id = category.SystemId
 
         for field in custom_fields:
+            static_options = field.get('StaticOptions')
+
             new_field = TicketCustomFields(
                 CategoryId = category_id,
                 FieldName = field.get("FieldName"),
                 FieldType = field.get("FieldType"),
                 FieldLabel = field.get("FieldLabel"),
+                ValueMode = field.get("ValueMode"),
+                IsGroup = field.get("IsGroup"),
+                GroupName = field.get("GroupName"),
+                IsRepeatable = field.get("IsRepeatable"),
                 SelectSourceType = field.get("SelectSourceType"),
-                SelectSourceValue = field.get("ValueColumn"),
+                TableName = field.get("TableName"),
+                LabelColumn = field.get("LabelColumn"),
+                ValueColumn = field.get("ValueColumn"),
+                StaticOptions = json.dumps(static_options),
                 CreatedBy=current_user
             )
-
             db.session.add(new_field)
 
         for approver in approvers:
@@ -70,6 +82,7 @@ def createTicketCateg():
                 LevelNo = approver.get("LevelNo"),
                 ApproverType = approver.get("ApproverType"),
                 ApproverValue = approver.get("ApproverValue"),
+                Description = approver.get("Description"),
                 CreatedBy = current_user
             )
 
@@ -86,3 +99,91 @@ def createTicketCateg():
         print("=== ERROR CREATING CATEGORIES ===")
         traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
+    
+@token_required
+def updateTicketCateg():
+    try:
+        data = request.get_json()
+        systemId = data.get('systemId')
+        current_user = g.payload['username']
+        custom_fields = data.get("CustomFields", [])
+        approvers = data.get("ApproverLevel", [])
+
+        print("Custom Fields:", custom_fields)
+        print("Approvers:", approvers)
+
+        category = TicketCategory.query.filter(TicketCategory.SystemId == systemId).first()
+
+        if not category:
+            return jsonify({"error": "No category found"}), 404
+        
+        category.Name = data.get('name')
+        category.ParentId = data.get('ParentId')
+        category.Description = data.get('Description')
+        category.Inhouse = data.get("Inhouse")
+        category.Date_Modified = formatted_date
+        category.Modified_By = current_user
+
+        #Delete old custom fields
+        TicketCustomFields.query.filter(TicketCustomFields.CategoryId == systemId).delete(synchronize_session=False)
+
+        #Insert new custom fields
+        for field in custom_fields:
+            static_options = field.get('StaticOptions')
+            new_field = TicketCustomFields(
+                CategoryId = systemId,
+                FieldName = field.get("FieldName"),
+                FieldType = field.get("FieldType"),
+                FieldLabel = field.get("FieldLabel"),
+                ValueMode = field.get("ValueMode"),
+                IsGroup = field.get("IsGroup"),
+                GroupName = field.get("GroupName"),
+                IsRepeatable = field.get("IsRepeatable"),
+                SelectSourceType = field.get("SelectSourceType"),
+                TableName = field.get("TableName"),
+                LabelColumn = field.get("LabelColumn"),
+                ValueColumn = field.get("ValueColumn"),
+                StaticOptions = json.dumps(static_options),
+                CreatedBy=current_user
+            )
+            db.session.add(new_field)
+
+        #Delete old approvers
+        TicketApproverLevel.query.filter(TicketApproverLevel.CategoryId == systemId).delete(synchronize_session=False)
+
+        #Insert new approvers
+        for approver in approvers:
+            new_approver = TicketApproverLevel(
+                CategoryId = systemId,
+                LevelNo = approver.get("LevelNo"),
+                ApproverType = approver.get("ApproverType"),
+                ApproverValue = approver.get("ApproverValue"),
+                Description = approver.get("Description"),
+                CreatedBy = current_user
+            )
+            db.session.add(new_approver)
+
+        db.session.commit()
+        db.session.flush()
+
+        return jsonify({
+            "message": "Ticket category updated successfully!"
+        }), 200
+    except Exception as e:
+        import traceback
+        print("=== ERROR UPDATING CATEGORIES ===")
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+    
+
+def get_options():
+    data = request.json
+    table = data.get("TableName")
+    value_col = data.get("ValueColumn")
+    label_col = data.get("LabelColumn")
+
+    query = text(f"SELECT {value_col} as value, {label_col} as label FROM {table}")
+    result = db.session.execute(query)
+
+    options = [{"value": row.value, "label": row.label} for row in result]
+    return jsonify(options)
