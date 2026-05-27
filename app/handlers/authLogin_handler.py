@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, session, current_app, g
+from flask import jsonify, request,  current_app, g
 from database import db
 from app.models.itoss.tblUsers import Users
 from app.models.kweph_mfa.tblConsolidated import Users_MFA
@@ -8,6 +8,8 @@ from app.services.jwt_validator import token_required
 from datetime import datetime, timedelta
 import os
 import jwt
+
+BASE_LOG_FOLDER = "./app/logs"
 
 def login():
     data = request.json
@@ -29,8 +31,12 @@ def login():
             if user:
                 token = jwt.encode({
                     'user_id': user.id,
+                    'emp_id': user.EmployeeId,
                     'username': user.EmployeeName,   #  add username
-                    'exp': datetime.utcnow() + timedelta(hours=1)
+                    'iat': datetime.utcnow(),
+                    'exp': datetime.utcnow() + timedelta(hours=1),
+                    'iss': 'ITOSSv2',
+                    'aud': 'itoss-client'
                 }, current_app.config['SECRET_KEY'], algorithm='HS256')
 
                 response = jsonify({"message": "Login successful!", "status" : "success", "user":user.EmployeeId})
@@ -38,7 +44,7 @@ def login():
                     key="access_token",
                     value =token,
                     httponly=True,     # Can't be accessed by JS
-                    secure=True,       # Only sent over HTTPS
+                    secure=True,       # Only sent over HTTPS ---- False: only for dev
                     samesite="None", # Prevents CSRF in most cases
                     max_age=3600       # Optional: auto-expire in 1 hour
                 )
@@ -52,9 +58,16 @@ def login():
     except Exception as e:
         return jsonify({"message": str(e), "status": "error"}), 500
 
+
+
 @token_required
-def validate_token():
-    return jsonify({"message": "Token is valid!", "user": g.payload['username']}), 200
+def protected_token():
+    print(">>> ROUTE HIT")
+
+    return jsonify({
+        "message": "Token is valid!",
+        "user": g.payload['username']
+    }), 200
     
 def test_db_connection():
     try:
@@ -82,3 +95,62 @@ def validatePass():
         return jsonify({"success": True}), 200
     else:
         return jsonify({"success": False, "message": "Invalid password"}), 401
+    
+
+
+@token_required
+def logout():
+    response = jsonify({
+        "message": "Logged out successfully!",
+        "status": "success"
+    })
+
+    response.delete_cookie(
+        "access_token",
+        httponly=True,
+        secure=True,
+        samesite="None"
+    )
+
+    return response, 200
+
+
+def logger():
+    data = request.json
+
+    employee_id = data.get('employeeId')
+    action = data.get('action')
+    details = data.get('details', '')
+
+    # DATE TODAY
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # TIME NOW
+    current_time = datetime.now().strftime("%H:%M:%S")
+
+    # USER FOLDER
+    user_folder = os.path.join(
+        BASE_LOG_FOLDER,
+        employee_id
+    )
+
+    os.makedirs(user_folder, exist_ok=True)
+
+    # DAILY FILE
+    log_file = os.path.join(
+        user_folder,
+        f"{today}.txt"
+    )
+
+    log_line = (
+        f"[{current_time}] "
+        f"{action} | "
+        f"{details}\n"
+    )
+
+    with open(log_file, "a", encoding="utf-8") as file:
+        file.write(log_line)
+
+    return jsonify({
+        "success": True
+    }), 200
