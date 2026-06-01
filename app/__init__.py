@@ -56,8 +56,6 @@ def create_app():
         'logmi_db' : logmi_db_uri
     }
 
-    
-
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['SQLALCHEMY_ECHO'] = False  # Enable SQL logging
     app.config['SQLALCHEMY_POOL_RECYCLE'] = 3600  # Recycle connections to avoid timeouts
@@ -74,7 +72,7 @@ def create_app():
 
     # from app.routes.user import user_bp
     CORS(app,
-     resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173"]}},
+     resources={r"/*": {"origins": ["http://localhost:5173", "http://127.0.0.1:5173", "https://itoss-uat.kwephilippines.ph"]}},
      supports_credentials=True,
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
