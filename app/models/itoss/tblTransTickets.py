@@ -59,6 +59,12 @@ class Tickets(db.Model):
         lazy=True
     )
 
+    modules = db.relationship(
+        "TicketInhouseModule",
+        backref="module",
+        lazy=True
+    )
+
     def __init__ (self, TicketNumber, RequestType, RequestorId, RequestFor, Status, CurrentLevel, DHId, ISId):
         self.TicketNumber = TicketNumber
         self.RequestType = RequestType
@@ -78,6 +84,7 @@ class Tickets(db.Model):
             "RequestFor": self.RequestFor,
             "RequestType": self.RequestType,
             "RequestName": self.request_name.Name if self.request_name else None,
+            "InhouseName": self.request_name.Inhouse if self.request_name else None,
             "approvers": [
                 {   
                     "ApprovalLevel": a.ApprovalLevel,
@@ -105,6 +112,14 @@ class Tickets(db.Model):
                 }
                 for m in self.messages
             ],
+
+            "modules" : [
+                {
+                    "ModuleName": d.ModuleName
+                }
+                for d in self.modules
+            ],
+
             "Status": self.Status,
             "CurrentLevel": self.CurrentLevel,
             "DHId": self.DHId,
