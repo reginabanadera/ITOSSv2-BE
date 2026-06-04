@@ -11,6 +11,7 @@ from app.models.itoss.tblTransTicketInhouseModule import TicketInhouseModule
 from app.models.itoss.tblTransTicketMessage import TicketMessage
 from app.models.hris.vwDeptHead import vwDeptHead
 from app.models.hris.vwAtKWE import vwAtKWE
+from app.services.email_sending import send_email
 from flask import jsonify, request, g
 from werkzeug.utils import secure_filename
 from app.services.jwt_validator import token_required
@@ -18,11 +19,6 @@ from datetime import datetime
 import pytz
 import json
 from sqlalchemy import or_, and_
-import smtplib
-import ssl
-from smtplib import SMTPAuthenticationError, SMTPException
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
 # Philippine timezone
 ph_tz = pytz.timezone("Asia/Manila")
@@ -864,26 +860,5 @@ def to_bool(value):
         return value
     return str(value).strip() in ["1", "true", "True", "Y", "yes"]
 
-
-def send_email(to_email, subject, message):
-    SMTP_SERVER = os.getenv("SMTP_SERVER")
-    SMTP_PORT = os.getenv("SMTP_PORT")  # Port 587 is typically used for TLS
-    
-    # Create the email
-    msg = MIMEMultipart() 
-    msg['From'] = 'itsupport.kweph@kwe.com'
-    msg['To'] = to_email
-    msg['Subject'] = subject
-
-    # Email body
-    body = message
-    msg.attach(MIMEText(body, "html"))
-
-    try:
-        # Connect to the SMTP server without SSL/TLS
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.sendmail(msg['From'], msg['To'], msg.as_string())
-    except Exception as e:
-        print("Error:", e)
 
 

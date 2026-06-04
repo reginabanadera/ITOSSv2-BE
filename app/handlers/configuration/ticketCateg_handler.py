@@ -187,3 +187,18 @@ def get_options():
 
     options = [{"value": row.value, "label": row.label} for row in result]
     return jsonify(options)
+
+@token_required
+def fetchAllTicketApprover():
+    try:
+        approvers = TicketApproverLevel.query.all()
+
+        if not approvers:
+            return jsonify({"error": "No approver found"}), 404  # Not Found is more appropriate
+     
+        return jsonify([approver.to_dict() for approver in approvers]), 200
+    except Exception as e:
+        import traceback
+        print("=== ERROR FETCHING APPROVERS ===")
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
