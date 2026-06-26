@@ -21,6 +21,12 @@ class TicketMessage(db.Model):
     Status = db.Column(db.String(20), nullable=False)
     DateCreated = db.Column(db.DateTime, default=lambda: datetime.now(philippines_tz))
 
+    files = db.relationship(
+        "TicketMessageFile",
+        backref="message",
+        lazy=True
+    )
+
     def __init__ (self, TicketNumber, EmployeeId, SenderName, Message, **kwargs):
         self.TicketNumber = TicketNumber
         self.EmployeeId = EmployeeId

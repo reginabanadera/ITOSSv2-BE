@@ -46,7 +46,7 @@ def login():
                     httponly=True,     # Can't be accessed by JS
                     secure=True,       # Only sent over HTTPS ---- False: only for dev
                     samesite="None", # Prevents CSRF in most cases
-                    max_age=3600       # Optional: auto-expire in 1 hour
+                    max_age=10800       # Optional: auto-expire in 1 hour
                 )
 
                 return response, 200
@@ -56,13 +56,15 @@ def login():
         else:
             return jsonify({"message": "ITOSS : User does not exist!", "status": "error"}), 404
     except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR REQUEST ===")
+        traceback.print_exc()
         return jsonify({"message": str(e), "status": "error"}), 500
-
-
 
 @token_required
 def protected_token():
-    print(">>> ROUTE HIT")
+    #print(">>> ROUTE HIT")
 
     return jsonify({
         "message": "Token is valid!",

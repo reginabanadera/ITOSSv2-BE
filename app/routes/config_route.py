@@ -7,6 +7,7 @@ from app.handlers.configuration.vwAtKWE_handler import fetchAllEmployees
 from app.handlers.configuration.groupEmail_handler import fetchAllGroupEmail, createNewGroup, editGroup
 from app.handlers.configuration.groupMember_handler import fetchAllGroupMembers, addGroupMember, deleteMember
 from app.handlers.configuration.ticketCateg_handler import fetchAllTicketCateg, createTicketCateg, updateTicketCateg, get_options, fetchAllTicketApprover
+from app.services.file_server import uploaded_file
 
 config_bp = Blueprint("config", __name__)
 
@@ -55,5 +56,8 @@ config_bp.route("/options", methods=["POST"])(get_options)
 
 #TICKET APPROVERS
 config_bp.route("/getTicketApprover", methods=["GET"])(fetchAllTicketApprover)
+
+#FILE SERVERS
+config_bp.route("/uploads/<filename>")(uploaded_file)
 
 
