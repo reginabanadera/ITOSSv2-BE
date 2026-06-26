@@ -9,6 +9,7 @@ from app.models.itoss.tblConfigTicketCategApprover import TicketApproverLevel
 from app.models.itoss.tblTransTicketSnapshot import TicketSnaphot
 from app.models.itoss.tblTransTicketInhouseModule import TicketInhouseModule
 from app.models.itoss.tblTransTicketMessage import TicketMessage
+from app.models.itoss.tblTransTicketMessageFile import TicketMessageFile
 from app.models.hris.vwDeptHead import vwDeptHead
 from app.models.hris.vwAtKWE import vwAtKWE
 from app.services.email_sending import send_email
@@ -32,6 +33,11 @@ formatted_date = now_ph.strftime("%Y-%m-%d")
 formatted_datentime = now_ph.strftime("%Y-%m-%d %H:%M:%S")
 
 UPLOAD_FOLDER = "./app/uploads"
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "pdf", "xls", "xlsx"}
+
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
 def fetchTickets():
@@ -514,11 +520,11 @@ def createTicket():
 @token_required
 def createTicket_message():
     try:
-        data = request.json
         current_user = g.payload['emp_id']
         current_username = g.payload['username']
-        ticket_no = data.get("ticket_no")
-        mensahe = data.get("message")
+        # ✅ use form instead of json
+        ticket_no = request.form.get("ticketno")
+        mensahe = request.form.get("message")
 
         new_message = TicketMessage(
             TicketNumber = ticket_no,
@@ -527,12 +533,46 @@ def createTicket_message():
             Message=mensahe
         )
         db.session.add(new_message)
+        db.session.flush()
+
+        files = request.files.getlist("files")
+
+        saved_files = []
+
+        if files:
+            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+            for file in files:
+                if file and allowed_file(file.filename):
+
+                    filename = secure_filename(file.filename)
+
+                    # optional: prevent overwriting by adding message id or timestamp
+                    unique_filename = f"{new_message.SystemId}_{filename}"
+
+                    file_path = os.path.join(UPLOAD_FOLDER, unique_filename)
+                    file_url = f"/uploads/{unique_filename}"
+
+                    file.save(file_path)
+
+                    saved_files.append(unique_filename)
+
+                    # OPTIONAL: store in DB (recommended)
+                    new_file = TicketMessageFile(
+                        TicketNumber=ticket_no,
+                        MessageId = new_message.SystemId,
+                        FileName=unique_filename,
+                        FilePath=file_url
+                    )
+                    db.session.add(new_file)
+        
         db.session.commit()
 
-        return {
+        return jsonify({
             "message": "Message sent successfully",
-            "ticket_no": ticket_no
-        }, 200
+            "ticket_no": ticket_no,
+            "files_saved": saved_files
+        }), 200
     
     except Exception as e:
         db.session.rollback()

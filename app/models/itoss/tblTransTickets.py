@@ -31,6 +31,8 @@ class Tickets(db.Model):
     CurrentLevel = db.Column(db.Integer, nullable=False)
     DHId = db.Column(db.String(50), nullable=False)
     ISId = db.Column(db.String(50), nullable=False)
+    AssignedTo = db.Column(db.String(50), nullable=False)
+    DateAssigned = db.Column(db.DateTime, nullable=True)
     DateCreated = db.Column(db.DateTime, default=lambda: datetime.now(philippines_tz))
     DateModified = db.Column(db.DateTime, nullable=True)
     
@@ -109,6 +111,13 @@ class Tickets(db.Model):
                     "Message": m.Message,
                     "Status": m.Status,
                     "DateSent": m.DateCreated.isoformat() if m.DateCreated else None,
+                    "Files": [
+                        {
+                            "FileName": f.FileName,
+                            "FilePath": f.FilePath
+                        }
+                        for f in m.files
+                    ]
                 }
                 for m in self.messages
             ],
