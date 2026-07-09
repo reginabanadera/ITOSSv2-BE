@@ -516,6 +516,37 @@ def createTicket():
         return jsonify({
             "error": str(e)
         }), 500
+    
+
+@token_required
+def update_Ticket():
+    try:
+        ticket_no = request.form.get("ticket_no")
+        IncomingCustomFields = json.loads(
+            request.form.get("custom_fields", "{}")
+        )
+
+        ticket_data = TicketData.query.filter(TicketData.TicketNumber == ticket_no).first()
+        if ticket_data:
+            existingCustomFields = json.loads(ticket_data.CustomFields or "{}")
+            existingCustomFields.update(IncomingCustomFields)
+            ticket_data.CustomFields = json.dumps(existingCustomFields)
+
+            ticket = Tickets.query.filter(Tickets.TicketNumber == ticket_no).first()
+            if ticket:
+                ticket.DateModified = formatted_datentime
+            
+            db.session.commit()
+            return jsonify({"message": "Ticket details successfully updated!"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR UPDATING TICKET ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 @token_required
 def createTicket_message():
@@ -807,7 +838,191 @@ def cancelRequest():
         return jsonify({
             "error": str(e)
         }), 500
-    
+
+@token_required
+def assignTicket():
+    try:
+        data = request.json
+        ticket_no = data.get("ticket_no")
+        category = data.get("categoryName")
+        assignedToId = data.get("assignedToId")
+        assignedToName = data.get("assignedToName")
+        assignedToEmail = data.get("assignedToEmail")
+        status = "Assigned"
+        current_user = g.payload["emp_id"]
+        current_username = g.payload["username"]
+        remarks = f"Assigned to {assignedToName}"
+
+        assign = Tickets.query.filter(Tickets.TicketNumber == ticket_no).first()
+        if assign:
+            if assign.Status != "Assigned":
+                assign.CurrentLevel = assign.CurrentLevel + 1
+
+            assign.AssignedTo = assignedToId
+            assign.DateAssigned = formatted_datentime
+            assign.Status = status
+
+            new_history = TicketApproval(
+                TicketNumber = ticket_no,
+                ApprovalLevel= assign.CurrentLevel + 1,
+                ApproverId = current_user,
+                Action = status,
+                Remarks = remarks
+            )
+            db.session.add(new_history)
+
+            new_message = TicketMessage(
+                TicketNumber = ticket_no,
+                EmployeeId=current_user,
+                SenderName=current_username,
+                Message=remarks,
+                Status=status
+            )
+            db.session.add(new_message)
+
+            db.session.commit()
+
+
+            #------------------EMAIL----------------------
+
+            subject = f"New Ticket Assigned: {ticket_no}"
+            html = f"""
+                    <html>
+                    <body style="margin:0; padding:0; background-color:#f4f6f9; font-family:Arial, sans-serif;">
+
+                        <table width="100%" cellpadding="0" cellspacing="0" style="padding:30px 0;">
+                        <tr>
+                            <td align="center">
+
+                            <table width="600" cellpadding="0" cellspacing="0"
+                                style="background:#ffffff; border-radius:10px; overflow:hidden;">
+
+                                <!-- Header -->
+                                <tr>
+                                <td style="background:#1677ff; padding:20px;">
+                                    <h2 style="margin:0; color:#ffffff; font-size:18px;">
+                                    IT Support Notification
+                                    </h2>
+                                </td>
+                                </tr>
+
+                                <!-- Content -->
+                                <tr>
+                                <td style="padding:25px; color:#333333; font-size:14px; line-height:1.6;">
+
+                                    <p>Hello,</p>
+
+                                    <p>
+                                        You have been assigned a new ticket by {current_username}.
+                                    </p>
+
+                                    <!-- Request Details -->
+                                    <table width="100%" cellpadding="0" cellspacing="0"
+                                        style="margin:20px 0; border:1px solid #f0f0f0; border-radius:8px;">
+
+                                        <tr>
+                                            <td colspan="2"
+                                                style="background:#fafafa; padding:12px 15px; font-weight:bold; font-size:14px;">
+                                                Request Details
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="padding:12px 15px; width:35%; color:#666;">
+                                                Ticket No.
+                                            </td>
+                                            <td style="padding:12px 15px; font-weight:600;">
+                                                {ticket_no}
+                                            </td>
+                                        </tr>
+
+                                        <tr style="background:#fcfcfc;">
+                                            <td style="padding:12px 15px; color:#666;">
+                                                Request Type
+                                            </td>
+                                            <td style="padding:12px 15px;">
+                                                {category}
+                                            </td>
+                                        </tr>
+
+                                        <tr style="background:#fcfcfc;">
+                                            <td style="padding:12px 15px; color:#666;">
+                                                Status
+                                            </td>
+                                            <td style="padding:12px 15px;">
+                                                <span style="
+                                                    background:#fff7e6;
+                                                    color:#d48806;
+                                                    padding:4px 10px;
+                                                    border-radius:20px;
+                                                    font-size:12px;
+                                                    font-weight:bold;
+                                                ">
+                                                    {status}
+                                                </span>
+                                            </td>
+                                        </tr>
+
+                                    </table>
+
+                                    <!-- Highlight -->
+                                    <div style="
+                                        background:#f5f8ff;
+                                        border-left:4px solid #1677ff;
+                                        padding:12px;
+                                        margin:20px 0;
+                                    ">
+                                        Please log in to the system to review the request details.
+                                    </div>
+
+                                    <p>
+                                    This is a system-generated email. Please do not reply directly
+                                    to this message.
+                                    </p>
+
+                                    <br/>
+
+                                    <p>
+                                    Regards,<br/>
+                                    <b>IT Support Team</b>
+                                    </p>
+
+                                </td>
+                                </tr>
+
+                                <!-- Footer -->
+                                <tr>
+                                <td style="
+                                    background:#f0f2f5;
+                                    padding:15px;
+                                    text-align:center;
+                                    font-size:12px;
+                                    color:#888;
+                                ">
+                                    © 2026 Information Technology Online Support System
+                                </td>
+                                </tr>
+
+                            </table>
+
+                            </td>
+                        </tr>
+                        </table>
+
+                    </body>
+                    </html>
+                    """
+            send_email(assignedToEmail, subject, html)
+
+            return jsonify({"message": "Ticket was successfully assigned!"}), 200
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR ASSIGNING REQUEST ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 
 def get_dynamic_superior(employee_id):
