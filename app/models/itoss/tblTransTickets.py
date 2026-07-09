@@ -133,6 +133,7 @@ class Tickets(db.Model):
             "CurrentLevel": self.CurrentLevel,
             "DHId": self.DHId,
             "ISId": self.ISId,
+            "AssignedTo": self.AssignedTo,
             "DateCreated": self.DateCreated.isoformat() if self.DateCreated else None,
             "DateModified": self.DateModified.isoformat() if self.DateModified else None,   
         }
