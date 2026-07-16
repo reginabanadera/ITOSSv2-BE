@@ -34,6 +34,10 @@ def create_app():
     ilog_db_name = os.getenv('ILOG_DB_NAME')  # Set this in your .env
     ilog_db_uri = f"mssql+pyodbc://{db_user}:{db_password}@{ilog_db_host}/{ilog_db_name}?driver={db_driver}"
 
+    #Configure the third (ACCSYS) database URI
+    accsys_db_name = os.getenv('ACCSYS_DB_NAME')  # Set this in your .env
+    accsys_db_uri = f"mssql+pyodbc://{db_user}:{db_password}@{db_host}/{accsys_db_name}?driver={db_driver}"
+
     #Configure the third (LOGMI) database URI
     logmi_db_name = os.getenv('LOGMI_DB_NAME')  # Set this in your .env
     logmi_db_uri = f"mssql+pyodbc://{db_user}:{db_password}@{logmi_db_host}/{logmi_db_name}?driver={db_driver}"
@@ -43,7 +47,8 @@ def create_app():
         "MFA": "mfa_db",
         "HRIS": "hris_db",
         "I-Log": "ilog_db",
-        "LOGMI": "logmi_db"
+        "LOGMI": "logmi_db", 
+        "AccSys": "accsys_db"
     }
     
     app.config["SYSTEM_BIND_MAP"] = SYSTEM_BIND_MAP
@@ -53,7 +58,8 @@ def create_app():
         'mfa_db': mfa_db_uri,  # Bind this URI to the 'mfa_db' key
         'hris_db': hris_db_uri, # Bind this URI to the 'hris_db' key
         'ilog_db': ilog_db_uri,
-        'logmi_db' : logmi_db_uri
+        'logmi_db' : logmi_db_uri,
+        'accsys_db' : accsys_db_uri
     }
 
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

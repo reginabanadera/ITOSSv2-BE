@@ -11,9 +11,11 @@ class vwAtKWE(db.Model):
     __bind_key__ = 'hris_db'
     EmployeeId = db.Column(db.Integer, primary_key=True)
     FullName = db.Column(db.String(100))
+    CompleteName = db.Column(db.String(100))
     FirstName = db.Column(db.String(50))
     LastName = db.Column(db.String(50))
     EmailAddress = db.Column(db.String(80)) #should depend on ITOSS EmailAddress
+    Company = db.Column(db.String(150))
     Designation = db.Column(db.String(300))
     Department = db.Column(db.String(300))
     Section = db.Column(db.String(100))
@@ -27,15 +29,18 @@ class vwAtKWE(db.Model):
     ISEmailAdd = db.Column(db.String(100))
     EmpLevel = db.Column(db.String(20))
     Tag = db.Column(db.String(20))
+    DateHired = db.Column(db.String(50))
 
     def to_dict(self):
         return {
             "EmployeeId": self.EmployeeId,
             "FullName": self.FullName,
+            "CompleteName": self.CompleteName,
             "FirstName": self.FirstName,
             "LastName": self.LastName,
             "EmailAddress": self.EmailAddress,
             "Designation": self.Designation,
+            "Company": self.Company,
             "Department": self.Department,
             "Section": self.Section,
             "Area": self.Area,
@@ -47,5 +52,6 @@ class vwAtKWE(db.Model):
             "DeptHeadEmailAdd": self.DeptHeadEmailAdd,
             "ISEmailAdd": self.ISEmailAdd,
             "EmpLevel": self.EmpLevel,
-            "Tag": self.Tag
+            "Tag": self.Tag,
+            "DateHired": self.DateHired
         }
