@@ -12,14 +12,16 @@ from app.models.itoss.tblTransTicketMessage import TicketMessage
 from app.models.itoss.tblTransTicketMessageFile import TicketMessageFile
 from app.models.hris.vwDeptHead import vwDeptHead
 from app.models.hris.vwAtKWE import vwAtKWE
+from app.services.mfa_registration import check_mfa
 from app.services.email_sending import send_email
+from app.services.inhouse_process import process_access
 from flask import jsonify, request, g
 from werkzeug.utils import secure_filename
 from app.services.jwt_validator import token_required
 from datetime import datetime
 import pytz
 import json
-from sqlalchemy import or_, and_
+from sqlalchemy import or_
 
 # Philippine timezone
 ph_tz = pytz.timezone("Asia/Manila")
@@ -1024,6 +1026,123 @@ def assignTicket():
             "error": str(e)
         }), 500
 
+@token_required
+def confirmAssignedTicket():
+    try:
+        data = request.json
+        ticket_no = data.get("ticket_no")
+        current_user = g.payload["emp_id"]
+        current_username = g.payload["username"]
+        status = "On Process"
+        remarks = f"Confirmed the ticket assignment"
+
+        confirm = Tickets.query.filter(Tickets.TicketNumber == ticket_no).first()
+        if confirm:
+            confirm.Status = "On Process"
+            confirm.CurrentLevel = confirm.CurrentLevel + 1
+            confirm.DateModified = formatted_datentime
+
+            new_history = TicketApproval(
+                TicketNumber = ticket_no,
+                ApprovalLevel= confirm.CurrentLevel + 1,
+                ApproverId = current_user,
+                Action = status,
+                Remarks = remarks
+            )
+            db.session.add(new_history)
+
+            new_message = TicketMessage(
+                TicketNumber = ticket_no,
+                EmployeeId=current_user,
+                SenderName=current_username,
+                Message=remarks,
+                Status=status
+            )
+            db.session.add(new_message)
+
+            db.session.commit()
+
+            return jsonify({"message": "Ticket assignment confirmed!"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR CONFIRMING ASSIGNED TICKET ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+@token_required
+def processInhouse():
+    try:
+        data = request.json
+        ticket_no = data.get("ticket_no")
+        employeeId = data.get("employeeId")
+        inhouse = data.get("inhouse")
+        modules = data.get("modules")
+        fields_value = data.get("fieldsValue", {})
+        emailAddress = None
+        current_user = g.payload["emp_id"]
+        current_username = g.payload["username"]
+       
+        if "EmailAddress" in fields_value:
+            emailAddress = fields_value["EmailAddress"]
+
+        OASId = check_mfa(employeeId, emailAddress)
+
+        result = process_access(inhouse, employeeId, emailAddress, OASId, modules, fields_value)
+
+        if not result["success"]:
+            return jsonify(result), 400
+
+        else:
+            if result["action"] == "update":
+                remarks = f"{inhouse} access has been successfully added. You may now try logging in to your account."
+            else:
+                remarks = (
+                    f"Your {inhouse} access has been successfully added. "
+                    "You may now try logging in to your account. "
+                    "If you do not have a password yet or have forgotten it, you may use the 'Forgot Password' feature to set a new one. "
+                    "If you already have an account in another in-house system, you can use the same password, as we are implementing a one-password-for-all approach across our in-house systems."
+                )
+            status = "For Closing"
+
+            ticket = Tickets.query.filter(Tickets.TicketNumber == ticket_no).first()
+            if ticket:
+                ticket.Status = status
+                ticket.CurrentLevel = ticket.CurrentLevel + 1
+                ticket.DateModified = formatted_datentime
+            
+            new_history = TicketApproval(
+                TicketNumber = ticket_no,
+                ApprovalLevel= ticket.CurrentLevel + 1,
+                ApproverId = current_user,
+                Action = status,
+                Remarks = remarks
+            )
+            db.session.add(new_history)
+            
+            new_message = TicketMessage(
+                TicketNumber = ticket_no,
+                EmployeeId=current_user,
+                SenderName=current_username,
+                Message=remarks,
+                Status=status
+            )
+            db.session.add(new_message)
+
+            db.session.commit()
+            return jsonify(result), 200
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR PROCESSING TICKET ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
 
 def get_dynamic_superior(employee_id):
     return vwAtKWE.query.filter_by(SuperiorId=employee_id).first()
