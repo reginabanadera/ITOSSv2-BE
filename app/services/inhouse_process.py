@@ -5,7 +5,17 @@ from sqlalchemy import text
 from app.models.itoss.tblConfigSystemProfile import SystemProfile
 from app.models.hris.vwAtKWE import vwAtKWE
 from app.services.jwt_validator import token_required
+from datetime import datetime
+import pytz
 import traceback
+
+# Philippine timezone
+ph_tz = pytz.timezone("Asia/Manila")
+
+# Current PH time
+now_ph = datetime.now(ph_tz)
+
+formatted_datentime = now_ph.strftime("%Y-%m-%d %H:%M:%S")
 
 @token_required
 def process_access(system_key, userId, emailAddress, OASId, modules, fields_value):
@@ -88,6 +98,7 @@ def process_access(system_key, userId, emailAddress, OASId, modules, fields_valu
                                 "UserGroup": userGroup,
                                 "Status": 1,
                                 "CreatedBy": current_username,
+                                "CreatedDate": formatted_datentime,
                                 "OASId": OASId,
                                 **modules
                             }
@@ -125,15 +136,17 @@ def process_access(system_key, userId, emailAddress, OASId, modules, fields_valu
                                 "EmailAddress": emailAddress,
                                 "FullName": logmi_name,
                                 "Company": company, 
+                                "Designation": user.Designation,
                                 "UserGroup": userGroup,
                                 "Status": 1,
                                 "CreatedBy": current_username,
+                                "CreatedDate": formatted_datentime,
                                 "OASId": OASId,
                                 **module_data
                             }
 
                         #------------------------------------------AccSys------------------------------------------------#
-                        if system_key == "AccSys":
+                        elif system_key == "AccSys":
                             accsys_name = user.CompleteName
                             company = user.Company
                             area = user.Area.title()
@@ -164,6 +177,7 @@ def process_access(system_key, userId, emailAddress, OASId, modules, fields_valu
                                 "AllowedCAAmount": allowedCA,
                                 "Status": 1,
                                 "CreatedBy": current_username,
+                                "CreatedDate": formatted_datentime,
                                 "OASId": OASId,
                                 **modules
                             }
@@ -217,10 +231,33 @@ def process_access(system_key, userId, emailAddress, OASId, modules, fields_valu
                                 "UserGroup": userGroup,
                                 "Active": 1,
                                 "CreatedBy": current_username,
+                                "CreatedDate": formatted_datentime,
                                 "OASId": OASId,
                             }
 
-                        #--------------------------------------------------------------------------------------------------#
+                        #---------------------------------------------BILLSYS-----------------------------------------------------#
+                        elif system_key == "BillSys":
+                            billsys_name = user.CompleteName
+                            company = user.Company
+                            area = user.Area.title()
+
+                            userGroup = "User"
+                            stat = "Active"
+
+                            insert_data = {
+                                "EmailAddress": emailAddress,
+                                "FullName": billsys_name,
+                                "Designation": user.Designation,
+                                "Company": company, 
+                                "Department": user.Department,
+                                "Area": area,
+                                "UserGroup": userGroup,
+                                "Status": stat,
+                                "CreatedBy": current_username,
+                                "CreatedDate": formatted_datentime,
+                                "OASId": OASId,
+                                **modules
+                            }
 
                         columns = ", ".join(f"[{c}]" for c in insert_data.keys())
                         values = ", ".join(f":{c}" for c in insert_data.keys())

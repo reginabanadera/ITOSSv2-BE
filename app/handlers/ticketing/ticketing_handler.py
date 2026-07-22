@@ -1,6 +1,6 @@
 import os
 from database import db
-from flask import current_app
+from flask import current_app, send_file
 from sqlalchemy import text
 from app.models.itoss.tblTransTickets import Tickets
 from app.models.itoss.tblTransTicketData import TicketData
@@ -18,10 +18,17 @@ from app.services.inhouse_process import process_access
 from flask import jsonify, request, g
 from werkzeug.utils import secure_filename
 from app.services.jwt_validator import token_required
+from app.services.fill_file import fill_excel_template
 from datetime import datetime
 import pytz
 import json
 from sqlalchemy import or_
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TEMPLATE_DIR = os.path.normpath(
+    os.path.join(BASE_DIR, "..", "..", "templates")
+)
 
 # Philippine timezone
 ph_tz = pytz.timezone("Asia/Manila")
@@ -1143,6 +1150,131 @@ def processInhouse():
         return jsonify({
             "error": str(e)
         }), 500
+
+@token_required
+def generateFile(ticket_id):
+    try:
+        ticket = Tickets.query.filter(Tickets.TicketNumber == ticket_id).first()
+        if not ticket:
+            raise Exception("Ticket not found")
+        
+        fields = ticket.custom_fields[0].CustomFields
+
+        # Convert JSON string to Python dict
+        fields = json.loads(fields)
+        
+        TEMPLATES = {
+            "5": [
+                {
+                    "name": "UFSCreation",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "UFSCreation.xlsx")
+                }
+            ],
+
+            "12": [
+                {
+                    "name": "URSCreation",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "URSCreation.xlsx")
+                }
+
+            ]
+        }
+
+        templates = TEMPLATES.get(str(ticket.RequestType))
+
+        if not templates:
+            raise Exception("No templates configured.")
+
+        generated_files = []
+
+        for template in templates:
+            if template["type"] == "excel":
+                output_path = fill_excel_template(
+                    template["name"],
+                    template["path"],
+                    fields
+                )
+            # elif template["type"] == "pdf":
+            #     generated_files.append(
+            #         fill_pdf_template(template["path"], ticket)
+            #     )
+
+                generated_files.append(output_path)
+        
+        if generated_files:
+            return send_file(
+                generated_files[0],
+                as_attachment=True,
+                download_name=f"{ticket.TicketNumber}.xlsx",
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR GENERATING FILE ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
+
+@token_required
+def ticketClose():
+    try:
+        data = request.json
+        ticketno = data.get("ticketno")
+        current_user = g.payload["emp_id"]
+        current_username = g.payload["username"]
+        
+        ticket = Tickets.query.filter(Tickets.TicketNumber == ticketno).first()
+        if ticket:
+            
+            if ticket.Status == "For Closing":
+                status = "Closed"
+                remarks = f"Closed the ticket."
+            else:
+                status = "For Closing"
+                remarks = f"Ticket {ticketno} was marked as resolved."
+
+            ticket.Status = status
+            ticket.CurrentLevel = ticket.CurrentLevel + 1
+            ticket.DateModified = formatted_datentime
+            
+            new_history = TicketApproval(
+                TicketNumber = ticketno,
+                ApprovalLevel= ticket.CurrentLevel + 1,
+                ApproverId = current_user,
+                Action = status,
+                Remarks = remarks
+            )
+            db.session.add(new_history)
+            
+            new_message = TicketMessage(
+                TicketNumber = ticketno,
+                EmployeeId=current_user,
+                SenderName=current_username,
+                Message=remarks,
+                Status=status
+            )
+            db.session.add(new_message)
+            db.session.commit()
+
+            return jsonify({
+                 "message": "The ticket has been marked as resolved."
+            }), 200
+        
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR MARKING TICKET ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
+    
+
 
 def get_dynamic_superior(employee_id):
     return vwAtKWE.query.filter_by(SuperiorId=employee_id).first()

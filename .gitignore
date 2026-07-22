@@ -18,6 +18,9 @@ app/.env
 app/logs
 app/uploads 
 
+#generated
+app/generated/
+
 # Secret keys
 *.key
 master.key
