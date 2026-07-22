@@ -52,7 +52,7 @@ class Tickets(db.Model):
     custom_fields = db.relationship(
         "TicketData",
         backref="data",
-        lazy=True
+        lazy=True,
     )
 
     messages = db.relationship(
