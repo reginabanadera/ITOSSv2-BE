@@ -41,7 +41,7 @@ formatted_date = now_ph.strftime("%Y-%m-%d")
 
 formatted_datentime = now_ph.strftime("%Y-%m-%d %H:%M:%S")
 
-UPLOAD_FOLDER = "./app/uploads"
+UPLOAD_FOLDER = "uploads"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "pdf", "xls", "xlsx"}
 
 
@@ -1154,15 +1154,29 @@ def processInhouse():
 @token_required
 def generateFile(ticket_id):
     try:
+        current_username = g.payload["username"]
+
+
         ticket = Tickets.query.filter(Tickets.TicketNumber == ticket_id).first()
         if not ticket:
             raise Exception("Ticket not found")
         
+        approval = TicketApproval.query.filter_by(
+                TicketNumber=ticket_id,
+                Action="Approved By IT Manager"
+            ).first()
+
+       
         fields = ticket.custom_fields[0].CustomFields
 
+        # DateActed = approval.DateActed 
+        formatted_date
         # Convert JSON string to Python dict
         fields = json.loads(fields)
-        
+        fields["DateActed"] = (approval.DateActed.isoformat() if approval.DateActed else "")
+        fields["CurrentUser"] = (current_username if current_username else "")
+        fields["DateToday"] =  (now_ph.strftime("%d/%m/%Y"))
+
         TEMPLATES = {
             "5": [
                 {
@@ -1172,11 +1186,36 @@ def generateFile(ticket_id):
                 }
             ],
 
+            "7": [
+                {
+                    "name": "EmailCreation",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "EmailCreation.xlsx")
+                }
+            ],
+
+            "8": [
+                {
+                    "name": "GroupEmailCreation",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "GroupEmailCreation.xlsx")
+                }
+            ],
+
             "12": [
                 {
                     "name": "URSCreation",
                     "type": "excel",
                     "path": os.path.join(TEMPLATE_DIR, "excel", "URSCreation.xlsx")
+                }
+
+            ], 
+
+            "13": [
+                {
+                    "name": "DataPatch",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "DataPatch.xlsx")
                 }
 
             ]
