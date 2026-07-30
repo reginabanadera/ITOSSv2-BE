@@ -182,10 +182,28 @@ def get_options():
     value_col = data.get("ValueColumn")
     label_col = data.get("LabelColumn")
 
-    query = text(f"SELECT {value_col} as value, {label_col} as label FROM {table}")
-    result = db.session.execute(query)
+    
 
-    options = [{"value": row.value, "label": row.label} for row in result]
+    
+    if table == "vwAtKWE":
+        query = text(f"SELECT {value_col} as value, {label_col} as label FROM {table} WHERE Tag = 'Active' order by {label_col} ")
+        engine = db.engines["hris_db"]      # or db.get_engine(bind="hris_db")
+    else:
+        query = text(f"SELECT {value_col} as value, {label_col} as label FROM {table} order by {label_col}")
+        engine = db.engine                  # default ITOSS database
+
+    with engine.connect() as conn:
+        result = conn.execute(query)
+        options = [
+            {"value": row.value, "label": row.label}
+            for row in result
+        ]
+
+    # result = db.session.execute(query)
+
+    # options = [{"value": row.value, "label": row.label} for row in result]
+    print(f"Total options: {len(options)}")
+    print(query)
     return jsonify(options)
 
 @token_required
