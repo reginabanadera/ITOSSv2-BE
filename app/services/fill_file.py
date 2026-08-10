@@ -30,6 +30,9 @@ def fill_excel_template(template_name, template_path, fields):
 
     elif template_name == "DataPatch":
         fill_dpatch_creation(ws, fields)
+    
+    elif template_name == "UASCreation":
+        fill_uas_creation(ws, fields)
 
     filename = f"{uuid.uuid4()}.xlsx"
     output_path = os.path.join(output_dir, filename)
@@ -147,3 +150,31 @@ def fill_dpatch_creation(ws, fields):
 
     ws["C27"] = description
 
+def fill_uas_creation(ws, fields):
+    request_type = fields.get("RequestType", "")
+    environment = fields.get("Environment", "")
+    userId = fields.get("UserID", "")
+    username = fields.get("UserName", "")
+    emailAddress = fields.get("EmailAddress", "")
+    res1 = fields.get("Responsibility1", "")
+    res2 = fields.get("Responsibility2", "")
+    res3 = fields.get("Responsibility3", "")
+    res4 = fields.get("Responsibility4", "")
+    res5 = fields.get("Responsibility5", "")
+    res6 = fields.get("Responsibility6", "")
+    res7 = fields.get("Responsibility7", "")
+
+    ws[f"D9"] = request_type
+    ws[f"D10"] = environment
+    ws[f"D11"] = username
+    ws[f"D12"] = userId
+    ws[f"D13"] = "KWEPH"
+    ws[f"D14"] = emailAddress
+    
+    ws[f"D18"] = res1
+    ws[f"D19"] = res2
+    ws[f"D20"] = res3
+    ws[f"D21"] = res4
+    ws[f"D22"] = res5
+    ws[f"D23"] = res6
+    ws[f"D24"] = res7

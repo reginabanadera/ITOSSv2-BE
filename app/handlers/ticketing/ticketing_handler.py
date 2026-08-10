@@ -65,9 +65,10 @@ def fetchTickets():
         if status_view and status_view == "open":
             approved = Tickets.Status.ilike("%Approved%")
             submitted = Tickets.Status.ilike("%Submitted%")
-            processing = Tickets.Status == "For Processing"
+            assigned = Tickets.Status == "Assigned"
+            processing = Tickets.Status == "On Process"
 
-            query = query.filter(or_(approved, submitted, processing))
+            query = query.filter(or_(approved, submitted, assigned, processing))
         if ticketno: 
             query = query.filter(Tickets.TicketNumber == ticketno)
 
@@ -1049,6 +1050,11 @@ def confirmAssignedTicket():
             confirm.CurrentLevel = confirm.CurrentLevel + 1
             confirm.DateModified = formatted_datentime
 
+
+        if confirm.RequestType == 17 and current_user == 'K656':
+            confirm.AssignedTo = "K656"
+            confirm.DateAssigned = formatted_datentime
+
             new_history = TicketApproval(
                 TicketNumber = ticket_no,
                 ApprovalLevel= confirm.CurrentLevel + 1,
@@ -1217,7 +1223,14 @@ def generateFile(ticket_id):
                     "type": "excel",
                     "path": os.path.join(TEMPLATE_DIR, "excel", "DataPatch.xlsx")
                 }
+            ],
 
+            "17": [
+                {
+                    "name": "UASCreation",
+                    "type": "excel",
+                    "path": os.path.join(TEMPLATE_DIR, "excel", "UASCreation.xlsx")
+                }
             ]
         }
 
