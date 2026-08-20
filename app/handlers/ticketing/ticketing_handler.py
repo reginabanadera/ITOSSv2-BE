@@ -10,6 +10,7 @@ from app.models.itoss.tblTransTicketSnapshot import TicketSnaphot
 from app.models.itoss.tblTransTicketInhouseModule import TicketInhouseModule
 from app.models.itoss.tblTransTicketMessage import TicketMessage
 from app.models.itoss.tblTransTicketMessageFile import TicketMessageFile
+from app.models.itoss.tblTransTicketServiceNow import TicketServiceNow
 from app.models.hris.vwDeptHead import vwDeptHead
 from app.models.hris.vwAtKWE import vwAtKWE
 from app.services.mfa_registration import check_mfa
@@ -41,7 +42,13 @@ formatted_date = now_ph.strftime("%Y-%m-%d")
 
 formatted_datentime = now_ph.strftime("%Y-%m-%d %H:%M:%S")
 
-UPLOAD_FOLDER = "uploads"
+UPLOAD_FOLDER = os.path.join(
+    os.getcwd(),
+    "app",
+    "uploads"
+)
+
+UPLOAD_PATH = "uploads"
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "pdf", "xls", "xlsx"}
 
 
@@ -77,7 +84,7 @@ def fetchTickets():
         tickets = query.all()
 
         # 🔥 ENRICH USERS (cross-db safe way)
-         # 🔥 ENRICH USERS (Requestor + RequestFor)
+        # 🔥 ENRICH USERS (Requestor + RequestFor)
         user_ids = list({
             t.RequestorId for t in tickets
         } | {
@@ -88,7 +95,7 @@ def fetchTickets():
             vwAtKWE.EmployeeId.in_(user_ids)
         ).all()
 
-        user_map = {u.EmployeeId: u.FullName for u in users}
+        user_map = {u.EmployeeId: u.CompleteName for u in users}
 
         result = []
         for t in tickets:
@@ -104,8 +111,6 @@ def fetchTickets():
         print("=== ERROR CREATING TICKET ===")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
-
-
 
 def generate_transaction_no():
     today = datetime.now().strftime("%Y%m%d")
@@ -175,7 +180,10 @@ def createTicket():
                         UPLOAD_FOLDER,
                         unique_filename
                     )
-
+                    relative_path = os.path.join(
+                        UPLOAD_PATH,
+                        unique_filename
+                    )
                     # SAVE ACTUAL FILE
                     file.save(save_path)
 
@@ -183,7 +191,7 @@ def createTicket():
                     saved_files.append({
                         "filename": filename,
                         "stored_filename": unique_filename,
-                        "path": save_path,
+                        "path": relative_path,
                         "content_type": file.content_type
                     })
 
@@ -218,9 +226,64 @@ def createTicket():
             .all()
         )
 
-        current_level = 1
+        current_level = 0
+
+        # approval_flow = []
+
+        # for cfg in configs:
+
+        #     approval_flow.append({
+        #         "level": cfg.LevelNo,
+        #         "approverType": cfg.ApproverType,
+        #         "ApproverValue": cfg.ApproverValue,
+        #     })
+
+        
+        #     # SELF REQUEST + DH
+        #     if (
+        #         RequestFor == current_user and
+        #         cfg.ApproverType == "Dynamic Manager"
+        #     ):
+
+        #         is_dh = vwDeptHead.query.filter_by(
+        #             EmployeeId=RequestFor
+        #         ).first()
+
+        #         if is_dh:
+        #             status = cfg.Description
+        #             current_level = cfg.LevelNo
+        #             break
+
+        #     # DYNAMIC SUPERIOR
+        #     elif cfg.ApproverType == "Dynamic Superior":
+
+        #         if ISId == current_user:
+        #             status = cfg.Description
+        #             current_level = cfg.LevelNo
+        #             break
+
+        #     elif cfg.ApproverType == "Dynamic Manager":
+        #         if DHId == current_user:
+        #             status = cfg.Description
+        #             current_level = cfg.LevelNo
+        #             break
+            
+        #     # SPECIFIC USER
+        #     elif cfg.ApproverType == "Specific User":
+
+        #         if (current_user == cfg.ApproverValue):
+        #             status = cfg.Description
+        #             current_level = cfg.LevelNo
+        #             break
+
+
 
         approval_flow = []
+
+        specific_user_cfg = None
+        self_dh_cfg = None
+        manager_cfg = None
+        superior_cfg = None
 
         for cfg in configs:
 
@@ -230,43 +293,31 @@ def createTicket():
                 "ApproverValue": cfg.ApproverValue,
             })
 
-        
-            # SELF REQUEST + DH
-            if (
-                RequestFor == current_user and
-                cfg.ApproverType == "Dynamic Manager"
-            ):
-
-                is_dh = vwDeptHead.query.filter_by(
-                    EmployeeId=RequestFor
-                ).first()
-
-                if is_dh:
-                    status = cfg.Description
-                    current_level = cfg.LevelNo
-                    break
-
-            # DYNAMIC SUPERIOR
-            elif cfg.ApproverType == "Dynamic Superior":
-
-                if ISId == current_user:
-                    status = cfg.Description
-                    current_level = cfg.LevelNo
-                    break
+            # SPECIFIC USER — always evaluated, never suppressed by Dynamic matches
+            if cfg.ApproverType == "Specific User":
+                if current_user == cfg.ApproverValue and specific_user_cfg is None:
+                    specific_user_cfg = cfg
 
             elif cfg.ApproverType == "Dynamic Manager":
-                if DHId == current_user:
-                    status = cfg.Description
-                    current_level = cfg.LevelNo
-                    break
-            
-            # SPECIFIC USER
-            elif cfg.ApproverType == "Specific User":
+                # SELF REQUEST + DH
+                if RequestFor == current_user:
+                    is_dh = vwDeptHead.query.filter_by(EmployeeId=RequestFor).first()
+                    if is_dh and self_dh_cfg is None:
+                        self_dh_cfg = cfg
 
-                if (current_user == cfg.ApproverValue):
-                    status = cfg.Description
-                    current_level = cfg.LevelNo
-                    break
+                if DHId == current_user and manager_cfg is None:
+                    manager_cfg = cfg
+
+            elif cfg.ApproverType == "Dynamic Superior":
+                if ISId == current_user and superior_cfg is None:
+                    superior_cfg = cfg
+
+        # PRIORITY: Specific User > Self+DH > Dynamic Manager > Dynamic Superior
+        matched_cfg = specific_user_cfg or self_dh_cfg or manager_cfg or superior_cfg
+
+        if matched_cfg:
+            status = matched_cfg.Description
+            current_level = matched_cfg.LevelNo
 
         # ---------------- CREATE TICKET ----------------
 
@@ -313,7 +364,8 @@ def createTicket():
                 EmployeeId=RequestFor,
                 EmailAddress=EmailAdd,
                 Inhouse=systemName,
-                ModuleName=md
+                ModuleName=md["module"],
+                ModuleLabel=md["label"]
             )
 
             db.session.add(new_module)
@@ -568,7 +620,7 @@ def createTicket_message():
         mensahe = request.form.get("message")
 
         new_message = TicketMessage(
-            TicketNumber = ticket_no,
+            TicketNumber=ticket_no,
             EmployeeId=current_user,
             SenderName=current_username,
             Message=mensahe
@@ -601,7 +653,7 @@ def createTicket_message():
                     # OPTIONAL: store in DB (recommended)
                     new_file = TicketMessageFile(
                         TicketNumber=ticket_no,
-                        MessageId = new_message.SystemId,
+                        MessageId=new_message.SystemId,
                         FileName=unique_filename,
                         FilePath=file_url
                     )
@@ -1051,9 +1103,9 @@ def confirmAssignedTicket():
             confirm.DateModified = formatted_datentime
 
 
-        if confirm.RequestType == 17 and current_user == 'K656':
-            confirm.AssignedTo = "K656"
-            confirm.DateAssigned = formatted_datentime
+            if confirm.RequestType == 17 and current_user == 'K656':
+                confirm.AssignedTo = "K656"
+                confirm.DateAssigned = formatted_datentime
 
             new_history = TicketApproval(
                 TicketNumber = ticket_no,
@@ -1162,7 +1214,6 @@ def generateFile(ticket_id):
     try:
         current_username = g.payload["username"]
 
-
         ticket = Tickets.query.filter(Tickets.TicketNumber == ticket_id).first()
         if not ticket:
             raise Exception("Ticket not found")
@@ -1266,6 +1317,67 @@ def generateFile(ticket_id):
         db.session.rollback()
         import traceback
         print("=== ERROR GENERATING FILE ===")
+        traceback.print_exc()
+        return jsonify({
+            "error": str(e)
+        }), 500
+    
+
+@token_required
+def ticketServiceNow():
+    try:
+        data = request.json
+        ticket_no = data.get("ticket_no")
+        requestType = data.get("requestType")
+        SNIncidentNumber = data.get("SNIncidentNumber")
+        SNDateStarted = data.get("SNDateStarted")
+        SNDateFinished = data.get("SNDateFinished")
+        current_user = g.payload["emp_id"]
+        current_username = g.payload["username"]
+
+        ticket = TicketServiceNow.query.filter(TicketServiceNow.TicketNumber==ticket_no).first()
+        if ticket:
+            if ticket.Status == "Closed":
+                remarks=f"Re-opened Service Now ticket"
+                status="Processing"
+                ticket.Status = status
+                ticket.DateFinished = None
+            elif ticket.Status == "Processing":
+                remarks = "The ServiceNow ticket has been closed."
+                status="Closed"
+                ticket.Status = status
+                ticket.DateFinished = SNDateFinished
+        else:
+            status="Processing"
+            remarks = f"Created ticket in ServiceNow, ticket number {SNIncidentNumber}"
+            new_ticket = TicketServiceNow(
+                TicketNumber=ticket_no,
+                RequestType=requestType,
+                SNIncidentNumber=SNIncidentNumber,
+                DateStarted=SNDateStarted,
+                Status=status
+            )
+            db.session.add(new_ticket)
+
+        new_message = TicketMessage(
+            TicketNumber = ticket_no,
+            EmployeeId=current_user,
+            SenderName=current_username,
+            Message=remarks,
+            Status=status
+        )
+        db.session.add(new_message)
+        db.session.commit()
+
+        return jsonify({
+            "message": "ServiceNow ticket details have been updated."
+        }), 200
+    
+
+    except Exception as e:
+        db.session.rollback()
+        import traceback
+        print("=== ERROR SAVING SERVICENOW DETAILS ===")
         traceback.print_exc()
         return jsonify({
             "error": str(e)

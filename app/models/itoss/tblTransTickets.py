@@ -67,6 +67,13 @@ class Tickets(db.Model):
         lazy=True
     )
 
+    serviceNow = db.relationship(
+        "TicketServiceNow",
+        backref="service",
+        lazy=True,
+        uselist=False
+    )
+
     def __init__ (self, TicketNumber, RequestType, RequestorId, RequestFor, Status, CurrentLevel, DHId, ISId):
         self.TicketNumber = TicketNumber
         self.RequestType = RequestType
@@ -124,10 +131,16 @@ class Tickets(db.Model):
 
             "modules" : [
                 {
-                    "ModuleName": d.ModuleName
+                    "ModuleName": d.ModuleName,
+                    "ModuleLabel": d.ModuleLabel
                 }
                 for d in self.modules
             ],
+
+            "SNIncidentNumber": self.serviceNow.SNIncidentNumber if self.serviceNow else None,
+            "SNDateStarted": self.serviceNow.DateStarted if self.serviceNow else None,
+            "SNDateFinished": self.serviceNow.DateFinished if self.serviceNow else None,
+            "SNStatus": self.serviceNow.Status if self.serviceNow else None,
 
             "Status": self.Status,
             "CurrentLevel": self.CurrentLevel,

@@ -1,5 +1,5 @@
 from flask import Blueprint
-from app.handlers.ticketing.ticketing_handler import createTicket, update_Ticket, fetchTickets, get_DBColumns, createTicket_message, resendTicket, cancelRequest, assignTicket, confirmAssignedTicket, processInhouse, generateFile, ticketClose
+from app.handlers.ticketing.ticketing_handler import createTicket, update_Ticket, fetchTickets, get_DBColumns, createTicket_message, resendTicket, cancelRequest, assignTicket, confirmAssignedTicket, processInhouse, generateFile, ticketServiceNow, ticketClose
 from app.handlers.ticketing.approval_handler import approval_history, approveTicket, declineTicket
 
 tick_bp = Blueprint("ticket", __name__)
@@ -17,6 +17,7 @@ tick_bp.route("/confirmassign", methods=["POST"])(confirmAssignedTicket)
 tick_bp.route("/process", methods=["POST"])(processInhouse)
 tick_bp.route("/<ticket_id>/generateFile", methods=["POST"])(generateFile)
 tick_bp.route("/ticket/close", methods=["POST"])(ticketClose)
+tick_bp.route("/ticket/serviceNow", methods=["POST"])(ticketServiceNow)
 
 
 tick_bp.route("/getapprovalhist", methods=["GET"])(approval_history)
