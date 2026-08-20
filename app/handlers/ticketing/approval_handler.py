@@ -98,7 +98,8 @@ def approveTicket():
             get_DHEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
             if get_DHEmail:
                 receiver = get_DHEmail.EmailAddress
-        elif approve.ApproverType == "Specific User":
+
+        elif config.ApproverType == "Specific User":
             next_approver = config.ApproverValue
             get_Email = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
             if get_Email:

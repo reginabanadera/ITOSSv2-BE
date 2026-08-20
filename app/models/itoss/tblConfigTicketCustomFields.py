@@ -33,10 +33,10 @@ class TicketCustomFields(db.Model):
     
     FieldName = db.Column(db.String(50), nullable=False)
     FieldType = db.Column(db.String(50), nullable=False)
-    FieldLabel = db.Column(db.String(50), nullable=False)
+    FieldLabel = db.Column(db.String(300), nullable=False)
     IsGroup = db.Column(db.String(1), nullable=False)
     IsRepeatable = db.Column(db.String(1), nullable=False)
-    GroupName = db.Column(db.String(50), nullable=False)
+    GroupName = db.Column(db.String(300), nullable=False)
     ValueMode = db.Column(db.String(50), nullable=False)
     SelectSourceType = db.Column(db.String(50), nullable=True)
     SelectSourceValue = db.Column(db.String(50), nullable=True)

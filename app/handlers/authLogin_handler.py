@@ -23,8 +23,9 @@ def login():
 
             user = Users_MFA.query.filter(
                 and_ (
-                    Users_MFA.EmployeeId == username,  # ← This is from the wrong model
-                    Users_MFA.Password == hash_pass
+                    Users_MFA.EmployeeId == username,  
+                    # Users_MFA.Password == hash_pass
+                    Users_MFA.Status == 1
                 )
             ).first()
 
@@ -32,7 +33,7 @@ def login():
                 token = jwt.encode({
                     'user_id': user.id,
                     'emp_id': user.EmployeeId,
-                    'username': user.EmployeeName,   #  add username
+                    'username': itoss_user.EmployeeName,   #  add username
                     'iat': datetime.utcnow(),
                     'exp': datetime.utcnow() + timedelta(hours=1),
                     'iss': 'ITOSSv2',
@@ -48,9 +49,7 @@ def login():
                     samesite="None", # Prevents CSRF in most cases
                     max_age=10800       # Optional: auto-expire in 1 hour
                 )
-
                 return response, 200
-
             else:
                 return jsonify({"message": "MFA : Invalid credentials!", "status": "error"}), 401
         else:
@@ -119,7 +118,6 @@ def logout():
 
 def logger():
     data = request.json
-
     employee_id = data.get('employeeId')
     action = data.get('action')
     details = data.get('details', '')

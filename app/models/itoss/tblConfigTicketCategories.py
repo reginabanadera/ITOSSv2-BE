@@ -31,6 +31,7 @@ class TicketCategory(db.Model):
         nullable=True
     )
     Description = db.Column(db.String(500), nullable=True)
+    IsSNConnected = db.Column(db.Integer, nullable=False)
     DateCreated = db.Column(db.DateTime, default=lambda: datetime.now(philippines_tz))
     CreatedBy = db.Column(db.String(50), nullable=True)
     DateModified = db.Column(db.String(50), nullable=True)
@@ -38,15 +39,22 @@ class TicketCategory(db.Model):
 
     approvers = db.relationship(
         "TicketApproverLevel",
-        backref="category",
+        backref="approver",
         lazy=True
     )
 
     custom_fields = db.relationship(
         "TicketCustomFields",
-        backref="category",
+        backref="fields",
         lazy=True
     )
+    
+    assignments = db.relationship(
+        "TicketAssignment",
+        backref="assignment",
+        lazy=True
+    )
+
 
     def __init__ (self, Name, CreatedBy, **kwargs):
         self.Name = Name
@@ -62,6 +70,7 @@ class TicketCategory(db.Model):
             "ParentId": self.ParentId,
             "Inhouse": self.Inhouse,
             "Description": self.Description,
+            "IsSNConnected": self.IsSNConnected,
             "approvers": [
                 {   
                     "LevelNo": a.LevelNo,
@@ -89,6 +98,16 @@ class TicketCategory(db.Model):
                 }
                 for c in self.custom_fields
             ],
+
+            "assignments" : [
+                {
+                    "AssignmentId": s.EmployeeId,
+                    "AssignmentName": s.EmployeeName,
+                    "AssignmentEmail": s.EmailAddress,
+                }
+                for s in self.assignments
+            ],
+
             "DateCreated": self.DateCreated.isoformat() if self.DateCreated else None,
             "CreatedBy": self.CreatedBy,
             "ModifiedBy": self.ModifiedBy,

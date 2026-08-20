@@ -2,6 +2,7 @@ from database import db
 from app.models.itoss.tblConfigTicketCategories import TicketCategory
 from app.models.itoss.tblConfigTicketCustomFields import TicketCustomFields
 from app.models.itoss.tblConfigTicketCategApprover import TicketApproverLevel
+from app.models.itoss.tblConfigTicketAssignment import TicketAssignment
 from flask import jsonify, request, g
 from app.services.jwt_validator import token_required
 from datetime import datetime
@@ -43,12 +44,14 @@ def createTicketCateg():
         parent_id = data.get("ParentId")
         inhouse = data.get("Inhouse")
         description = data.get("Description")
+        IsSNConnected = data.get("IsSNConnected")
         custom_fields = data.get("CustomFields", [])
         approvers = data.get("ApproverLevel", [])
+        assignments = data.get("Assignment", [])
         current_user = g.payload['username']
 
         #CreateCategory 
-        category = TicketCategory(Name=name, ParentId=parent_id, Inhouse=inhouse, Description=description, CreatedBy=current_user)
+        category = TicketCategory(Name=name, ParentId=parent_id, IsSNConnected=IsSNConnected, Inhouse=inhouse, Description=description, CreatedBy=current_user)
 
         db.session.add(category)
         db.session.flush()  # get category.SystemId
@@ -85,8 +88,17 @@ def createTicketCateg():
                 Description = approver.get("Description"),
                 CreatedBy = current_user
             )
-
             db.session.add(new_approver)
+
+        for assignment in assignments:
+            new_assignment = TicketAssignment(
+                CategoryId=category_id,
+                EmployeeId=assignment.get("AssignmentId"),
+                EmployeeName=assignment.get("AssignmentName"),
+                EmailAddress=assignment.get("AssignmentEmail"),
+                CreatedBy = current_user
+            )
+            db.session.add(new_assignment)
 
         db.session.commit()
 
@@ -108,8 +120,8 @@ def updateTicketCateg():
         current_user = g.payload['username']
         custom_fields = data.get("CustomFields", [])
         approvers = data.get("ApproverLevel", [])
-
-        print("Custom Fields:", custom_fields)
+        assignments = data.get("Assignment", [])
+        
         print("Approvers:", approvers)
 
         category = TicketCategory.query.filter(TicketCategory.SystemId == systemId).first()
@@ -120,6 +132,7 @@ def updateTicketCateg():
         category.Name = data.get('name')
         category.ParentId = data.get('ParentId')
         category.Description = data.get('Description')
+        category.IsSNConnected = data.get('IsSNConnected')
         category.Inhouse = data.get("Inhouse")
         category.Date_Modified = formatted_date
         category.Modified_By = current_user
@@ -162,6 +175,19 @@ def updateTicketCateg():
                 CreatedBy = current_user
             )
             db.session.add(new_approver)
+
+        #Delete old assignments
+        TicketAssignment.query.filter(TicketAssignment.CategoryId == systemId).delete(synchronize_session=False)
+
+        for assignment in assignments:
+            new_assignment = TicketAssignment(
+                CategoryId=systemId,
+                EmployeeId=assignment.get("AssignmentId"),
+                EmployeeName=assignment.get("AssignmentName"),
+                EmailAddress=assignment.get("AssignmentEmail"),
+                CreatedBy = current_user
+            )
+            db.session.add(new_assignment)
 
         db.session.commit()
         db.session.flush()

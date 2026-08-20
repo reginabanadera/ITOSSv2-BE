@@ -34,11 +34,13 @@ class TicketInhouseModule(db.Model):
     EmployeeId = db.Column(db.String(50), nullable=False)
     EmailAddress = db.Column(db.String(90), nullable=True)
     ModuleName = db.Column(db.String(80), nullable=False)
+    ModuleLabel = db.Column(db.String(300), nullable=False)
    
-    def __init__ (self, TicketNumber, EmployeeId, ModuleName, **kwargs):
+    def __init__ (self, TicketNumber, EmployeeId, ModuleName, ModuleLabel, **kwargs):
         self.TicketNumber = TicketNumber
         self.EmployeeId = EmployeeId
         self.ModuleName = ModuleName
+        self.ModuleLabel = ModuleLabel
 
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -50,5 +52,6 @@ class TicketInhouseModule(db.Model):
             "TicketNumber": self.TicketNumber,
             "EmployeeId": self.EmployeeId,
             "EmailAddress": self.EmailAddress,
-            "ModuleName": self.ModuleName
+            "ModuleName": self.ModuleName,
+            "ModuleLabel": self.ModuleLabel
         }

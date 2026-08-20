@@ -32,12 +32,9 @@ class TicketData(db.Model):
     )
     CustomFields = db.Column(db.Text, nullable=False)
    
-
-    
     def __init__ (self, TicketNumber, CustomFields):
         self.TicketNumber = TicketNumber
         self.CustomFields = CustomFields
-        
 
     def to_dict(self):
         return {
