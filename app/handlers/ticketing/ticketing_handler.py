@@ -13,6 +13,7 @@ from app.models.itoss.tblTransTicketMessageFile import TicketMessageFile
 from app.models.itoss.tblTransTicketServiceNow import TicketServiceNow
 from app.models.hris.vwDeptHead import vwDeptHead
 from app.models.hris.vwAtKWE import vwAtKWE
+from app.models.hris.vwImmediateSuperior import vwImmediateSuperior
 from app.services.mfa_registration import check_mfa
 from app.services.email_sending import send_email
 from app.services.inhouse_process import process_access
@@ -228,61 +229,12 @@ def createTicket():
 
         current_level = 0
 
-        # approval_flow = []
-
-        # for cfg in configs:
-
-        #     approval_flow.append({
-        #         "level": cfg.LevelNo,
-        #         "approverType": cfg.ApproverType,
-        #         "ApproverValue": cfg.ApproverValue,
-        #     })
-
-        
-        #     # SELF REQUEST + DH
-        #     if (
-        #         RequestFor == current_user and
-        #         cfg.ApproverType == "Dynamic Manager"
-        #     ):
-
-        #         is_dh = vwDeptHead.query.filter_by(
-        #             EmployeeId=RequestFor
-        #         ).first()
-
-        #         if is_dh:
-        #             status = cfg.Description
-        #             current_level = cfg.LevelNo
-        #             break
-
-        #     # DYNAMIC SUPERIOR
-        #     elif cfg.ApproverType == "Dynamic Superior":
-
-        #         if ISId == current_user:
-        #             status = cfg.Description
-        #             current_level = cfg.LevelNo
-        #             break
-
-        #     elif cfg.ApproverType == "Dynamic Manager":
-        #         if DHId == current_user:
-        #             status = cfg.Description
-        #             current_level = cfg.LevelNo
-        #             break
-            
-        #     # SPECIFIC USER
-        #     elif cfg.ApproverType == "Specific User":
-
-        #         if (current_user == cfg.ApproverValue):
-        #             status = cfg.Description
-        #             current_level = cfg.LevelNo
-        #             break
-
-
-
         approval_flow = []
 
         specific_user_cfg = None
         self_dh_cfg = None
         manager_cfg = None
+        self_is_cfg = None
         superior_cfg = None
 
         for cfg in configs:
@@ -309,11 +261,16 @@ def createTicket():
                     manager_cfg = cfg
 
             elif cfg.ApproverType == "Dynamic Superior":
+                if RequestFor == current_user:
+                    is_is = vwImmediateSuperior.query.filter_by(EmployeeId=RequestFor).first()
+                    if is_is and self_is_cfg is None:
+                        self_is_cfg = cfg
+
                 if ISId == current_user and superior_cfg is None:
                     superior_cfg = cfg
 
         # PRIORITY: Specific User > Self+DH > Dynamic Manager > Dynamic Superior
-        matched_cfg = specific_user_cfg or self_dh_cfg or manager_cfg or superior_cfg
+        matched_cfg = specific_user_cfg or self_dh_cfg or manager_cfg or self_is_cfg or superior_cfg
 
         if matched_cfg:
             status = matched_cfg.Description
@@ -418,7 +375,13 @@ def createTicket():
             receiver = None
             next_approver = None
 
-            if approver == "Dynamic Manager":
+            if approver == "Dynamic Superior":
+                next_approver = ISId
+                get_ISEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
+                if get_ISEmail:
+                    receiver = get_ISEmail.EmailAddress
+
+            elif approver == "Dynamic Manager":
                 next_approver = DHId
                 get_DHEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
                 if get_DHEmail:
@@ -429,6 +392,9 @@ def createTicket():
                 if get_Email:
                     receiver = get_Email.EmailAddress
 
+            real_receiver = receiver
+            print(real_receiver)
+
             if receiver:
 
                 receiver = "reginamaye.banadera@kwe.com"
@@ -436,7 +402,7 @@ def createTicket():
                 html = f"""
                     <html>
                     <body style="margin:0; padding:0; background-color:#f4f6f9; font-family:Arial, sans-serif;">
-
+                        {real_receiver}
                         <table width="100%" cellpadding="0" cellspacing="0" style="padding:30px 0;">
                         <tr>
                             <td align="center">

@@ -16,6 +16,7 @@ def login():
     username = data.get('username')
     password = data.get('password')
     hash_pass = hash_password(password)
+    stat = 1
 
     try:
         itoss_user = Users.query.filter(Users.EmployeeId == username).first()
@@ -25,7 +26,7 @@ def login():
                 and_ (
                     Users_MFA.EmployeeId == username,  
                     # Users_MFA.Password == hash_pass
-                    Users_MFA.Status == 1
+                    Users_MFA.Status == stat
                 )
             ).first()
 

@@ -8,21 +8,38 @@ from email.mime.multipart import MIMEMultipart
 
 def send_email(to_email, subject, message):
     SMTP_SERVER = os.getenv("SMTP_SERVER")
-    SMTP_PORT = os.getenv("SMTP_PORT")  # Port 587 is typically used for TLS
-    
-    # Create the email
-    msg = MIMEMultipart() 
-    msg['From'] = 'itsupport.kweph@kwe.com'
-    msg['To'] = to_email
-    msg['Subject'] = subject
+    SMTP_PORT = os.getenv("SMTP_PORT")
 
-    # Email body
-    body = message
-    msg.attach(MIMEText(body, "html"))
+    msg = MIMEMultipart()
+    msg["From"] = "itsupport.kweph@kwe.com"
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(message, "html"))
 
     try:
-        # Connect to the SMTP server without SSL/TLS
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.sendmail(msg['From'], msg['To'], msg.as_string())
+        print("=== SENDING EMAIL ===")
+        print("SMTP SERVER:", SMTP_SERVER)
+        print("SMTP PORT:", SMTP_PORT)
+        print("FROM:", msg["From"])
+        print("TO:", msg["To"])
+
+        with smtplib.SMTP(SMTP_SERVER, int(SMTP_PORT), timeout=30) as server:
+            server.set_debuglevel(1)
+
+            server.sendmail(
+                msg["From"],
+                [msg["To"]],
+                msg.as_string()
+            )
+
+        print("=== EMAIL SENT SUCCESSFULLY ===")
+
     except Exception as e:
-        print("Error:", e)
+        import traceback
+
+        print("=== EMAIL ERROR ===")
+        print("ERROR:", str(e))
+        traceback.print_exc()
+
+        raise
