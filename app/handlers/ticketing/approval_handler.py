@@ -32,18 +32,18 @@ def approveTicket():
         data = request.get_json()
 
         ticketno = data.get("TicketNumber")
-        currentLevel = data.get("CurrentLevel")
         requestType = data.get("RequestType")
         requestName = data.get("RequestName")
         requestorName = data.get("RequestorName")
 
-        nextLevel = currentLevel + 1
         current_user = g.payload["emp_id"]
         current_username = g.payload["username"]
 
         approve = Tickets.query.filter(Tickets.TicketNumber == ticketno).first()
         if not approve: 
             return jsonify({"message": "No ticket number found!"}), 404
+        
+        nextLevel = approve.CurrentLevel + 1
 
         config = TicketApproverLevel.query.filter(
             TicketApproverLevel.CategoryId == requestType,
@@ -87,166 +87,177 @@ def approveTicket():
         db.session.commit()
 
         #----------------------EMAIL SENDING---------------------------------------------
-        if config.ApproverType == "Dynamic Superior":
-            next_approver = approve.ISId
-            get_ISEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
-            if get_ISEmail:
-                receiver = get_ISEmail.EmailAddress
+        receiver = None
+        nextLevelApprover = approve.CurrentLevel + 1
 
-        elif config.ApproverType == "Dynamic Manager":
-            next_approver = approve.DHId
-            get_DHEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
-            if get_DHEmail:
-                receiver = get_DHEmail.EmailAddress
+        print(f'next Approver: {nextLevelApprover}')
+        configNext = TicketApproverLevel.query.filter(
+            TicketApproverLevel.CategoryId == requestType,
+            TicketApproverLevel.LevelNo == nextLevelApprover
+        ).first()
+        if configNext:
 
-        elif config.ApproverType == "Specific User":
-            next_approver = config.ApproverValue
-            get_Email = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
-            if get_Email:
-                receiver = get_Email.EmailAddress
+            if configNext.ApproverType == "Dynamic Superior":
+                next_approver = approve.ISId
+                get_ISEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
+                if get_ISEmail:
+                    receiver = get_ISEmail.EmailAddress
 
+            elif configNext.ApproverType == "Dynamic Manager":
+                next_approver = approve.DHId
+                get_DHEmail = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
+                if get_DHEmail:
+                    receiver = get_DHEmail.EmailAddress
 
-        receiver = "reginamaye.banadera@kwe.com"
-        subject = f"For Approval: ITOSS Request [{formatted_date}]"
-        html = f"""
-            <html>
-            <body style="margin:0; padding:0; background-color:#f4f6f9; font-family:Arial, sans-serif;">
+            elif configNext.ApproverType == "Specific User":
+                next_approver = configNext.ApproverValue
+                get_Email = vwAtKWE.query.filter_by(EmployeeId = next_approver).first()
+                if get_Email:
+                    receiver = get_Email.EmailAddress
 
-                <table width="100%" cellpadding="0" cellspacing="0" style="padding:30px 0;">
-                <tr>
-                    <td align="center">
+            real_receiver = receiver
+            if receiver:
+                receiver = "reginamaye.banadera@kwe.com"
+                subject = f"For Approval: ITOSS Request [{formatted_date}]"
+                html = f"""
+                    <html>
+                    <body style="margin:0; padding:0; background-color:#f4f6f9; font-family:Arial, sans-serif;">
 
-                    <table width="600" cellpadding="0" cellspacing="0"
-                        style="background:#ffffff; border-radius:10px; overflow:hidden;">
-
-                        <!-- Header -->
+                        <table width="100%" cellpadding="0" cellspacing="0" style="padding:30px 0;">
                         <tr>
-                        <td style="background:#1677ff; padding:20px;">
-                            <h2 style="margin:0; color:#ffffff; font-size:18px;">
-                            IT Support Notification
-                            </h2>
-                        </td>
-                        </tr>
+                            <td align="center">
+                            {real_receiver}
+                            <table width="600" cellpadding="0" cellspacing="0"
+                                style="background:#ffffff; border-radius:10px; overflow:hidden;">
 
-                        <!-- Content -->
-                        <tr>
-                        <td style="padding:25px; color:#333333; font-size:14px; line-height:1.6;">
-
-                            <p>Hello,</p>
-
-                            <p>
-                            This is an automated reminder for a pending request in the
-                            Information Technology Online Support System.
-                            </p>
-
-                            <!-- Request Details -->
-                            <table width="100%" cellpadding="0" cellspacing="0"
-                                style="margin:20px 0; border:1px solid #f0f0f0; border-radius:8px;">
-
+                                <!-- Header -->
                                 <tr>
-                                    <td colspan="2"
-                                        style="background:#fafafa; padding:12px 15px; font-weight:bold; font-size:14px;">
-                                        Request Details
-                                    </td>
+                                <td style="background:#1677ff; padding:20px;">
+                                    <h2 style="margin:0; color:#ffffff; font-size:18px;">
+                                    IT Support Notification
+                                    </h2>
+                                </td>
                                 </tr>
 
+                                <!-- Content -->
                                 <tr>
-                                    <td style="padding:12px 15px; width:35%; color:#666;">
-                                        Ticket No.
-                                    </td>
-                                    <td style="padding:12px 15px; font-weight:600;">
-                                        {ticketno}
-                                    </td>
+                                <td style="padding:25px; color:#333333; font-size:14px; line-height:1.6;">
+
+                                    <p>Hello,</p>
+
+                                    <p>
+                                    This is an automated reminder for a pending request in the
+                                    Information Technology Online Support System.
+                                    </p>
+
+                                    <!-- Request Details -->
+                                    <table width="100%" cellpadding="0" cellspacing="0"
+                                        style="margin:20px 0; border:1px solid #f0f0f0; border-radius:8px;">
+
+                                        <tr>
+                                            <td colspan="2"
+                                                style="background:#fafafa; padding:12px 15px; font-weight:bold; font-size:14px;">
+                                                Request Details
+                                            </td>
+                                        </tr>
+
+                                        <tr>
+                                            <td style="padding:12px 15px; width:35%; color:#666;">
+                                                Ticket No.
+                                            </td>
+                                            <td style="padding:12px 15px; font-weight:600;">
+                                                {ticketno}
+                                            </td>
+                                        </tr>
+
+                                        <tr style="background:#fcfcfc;">
+                                            <td style="padding:12px 15px; color:#666;">
+                                                Request Type
+                                            </td>
+                                            <td style="padding:12px 15px;">
+                                                {requestName}
+                                            </td>
+
+                                        </tr>
+                                            <td style="padding:12px 15px; color:#666;">
+                                                Requestor
+                                            </td>
+                                            <td style="padding:12px 15px;">
+                                                {requestorName}
+                                            </td>
+                                        <tr>
+
+                                        </tr>
+
+                                        <tr style="background:#fcfcfc;">
+                                            <td style="padding:12px 15px; color:#666;">
+                                                Status
+                                            </td>
+                                            <td style="padding:12px 15px;">
+                                                <span style="
+                                                    background:#fff7e6;
+                                                    color:#d48806;
+                                                    padding:4px 10px;
+                                                    border-radius:20px;
+                                                    font-size:12px;
+                                                    font-weight:bold;
+                                                ">
+                                                    {status}
+                                                </span>
+                                            </td>
+                                        </tr>
+
+                                    </table>
+
+                                    <!-- Highlight -->
+                                    <div style="
+                                        background:#f5f8ff;
+                                        border-left:4px solid #1677ff;
+                                        padding:12px;
+                                        margin:20px 0;
+                                    ">
+                                        Please log in to the system to review the request details.
+                                    </div>
+
+                                    <p>
+                                    This is a system-generated email. Please do not reply directly
+                                    to this message.
+                                    </p>
+
+                                    <br/>
+
+                                    <p>
+                                    Regards,<br/>
+                                    <b>IT Support Team</b>
+                                    </p>
+
+                                </td>
                                 </tr>
 
-                                <tr style="background:#fcfcfc;">
-                                    <td style="padding:12px 15px; color:#666;">
-                                        Request Type
-                                    </td>
-                                    <td style="padding:12px 15px;">
-                                        {requestName}
-                                    </td>
-
-                                </tr>
-                                    <td style="padding:12px 15px; color:#666;">
-                                        Requestor
-                                    </td>
-                                    <td style="padding:12px 15px;">
-                                        {requestorName}
-                                    </td>
+                                <!-- Footer -->
                                 <tr>
-
-                                </tr>
-
-                                <tr style="background:#fcfcfc;">
-                                    <td style="padding:12px 15px; color:#666;">
-                                        Status
-                                    </td>
-                                    <td style="padding:12px 15px;">
-                                        <span style="
-                                            background:#fff7e6;
-                                            color:#d48806;
-                                            padding:4px 10px;
-                                            border-radius:20px;
-                                            font-size:12px;
-                                            font-weight:bold;
-                                        ">
-                                            {status}
-                                        </span>
-                                    </td>
+                                <td style="
+                                    background:#f0f2f5;
+                                    padding:15px;
+                                    text-align:center;
+                                    font-size:12px;
+                                    color:#888;
+                                ">
+                                    © 2026 Information Technology Online Support System
+                                </td>
                                 </tr>
 
                             </table>
 
-                            <!-- Highlight -->
-                            <div style="
-                                background:#f5f8ff;
-                                border-left:4px solid #1677ff;
-                                padding:12px;
-                                margin:20px 0;
-                            ">
-                                Please log in to the system to review the request details.
-                            </div>
-
-                            <p>
-                            This is a system-generated email. Please do not reply directly
-                            to this message.
-                            </p>
-
-                            <br/>
-
-                            <p>
-                            Regards,<br/>
-                            <b>IT Support Team</b>
-                            </p>
-
-                        </td>
+                            </td>
                         </tr>
+                        </table>
 
-                        <!-- Footer -->
-                        <tr>
-                        <td style="
-                            background:#f0f2f5;
-                            padding:15px;
-                            text-align:center;
-                            font-size:12px;
-                            color:#888;
-                        ">
-                            © 2026 Information Technology Online Support System
-                        </td>
-                        </tr>
+                    </body>
+                    </html>
+                    """
 
-                    </table>
-
-                    </td>
-                </tr>
-                </table>
-
-            </body>
-            </html>
-            """
-
-        send_email(receiver, subject, html)
+                send_email(receiver, subject, html)
 
         return jsonify({"message": "Request successfully approved!"}), 200
     
