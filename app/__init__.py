@@ -19,6 +19,13 @@ def create_app():
     ilog_db_host = os.getenv('ILOG_DB_HOST')
     logmi_db_host = os.getenv('LOGMI_DB_HOST')
     itoss_db_name = os.getenv('ITOSS_DB_NAME')
+
+    mysql_user = os.getenv('MYSQL_DB_USER')
+    mysql_password = os.getenv('MYSQL_DB_PASSWORD')
+    mysql_host = os.getenv('MYSQL_DB_HOST')
+    gts_db_name = os.getenv('GTS_DB_NAME')
+
+
     db_driver = 'ODBC+Driver+17+for+SQL+Server'
     db_uri = f"mssql+pyodbc://{db_user}:{db_password}@{db_host}/{itoss_db_name}?driver={db_driver}"
 
@@ -42,13 +49,20 @@ def create_app():
     logmi_db_name = os.getenv('LOGMI_DB_NAME')  # Set this in your .env
     logmi_db_uri = f"mssql+pyodbc://{db_user}:{db_password}@{logmi_db_host}/{logmi_db_name}?driver={db_driver}"
 
+    #GTS PORTAL
+    gts_db_uri = (f"mysql+pymysql://{mysql_user}:{mysql_password}"
+        f"@{mysql_host}/{gts_db_name}"
+    )
+
+
     SYSTEM_BIND_MAP = {
         "ITOSS": None,
         "MFA": "mfa_db",
         "HRIS": "hris_db",
         "I-Log": "ilog_db",
         "LOGMI": "logmi_db", 
-        "AccSys": "accsys_db"
+        "AccSys": "accsys_db",
+        "GTS": "gts_db",
     }
     
     app.config["SYSTEM_BIND_MAP"] = SYSTEM_BIND_MAP
@@ -59,7 +73,8 @@ def create_app():
         'hris_db': hris_db_uri, # Bind this URI to the 'hris_db' key
         'ilog_db': ilog_db_uri,
         'logmi_db' : logmi_db_uri,
-        'accsys_db' : accsys_db_uri
+        'accsys_db' : accsys_db_uri,
+        'gts_db': gts_db_uri
     }
 
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

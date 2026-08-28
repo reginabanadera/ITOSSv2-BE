@@ -1,289 +1,655 @@
-import os
-from database import db
+import traceback
+from datetime import datetime
+from urllib.parse import quote_plus
+
+import pytz
 from flask import current_app, g
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
+
+from database import db
 from app.models.itoss.tblConfigSystemProfile import SystemProfile
 from app.models.hris.vwAtKWE import vwAtKWE
 from app.services.jwt_validator import token_required
-from datetime import datetime
-import pytz
-import traceback
 
+
+# ============================================================
 # Philippine timezone
+# ============================================================
+
 ph_tz = pytz.timezone("Asia/Manila")
 
-# Current PH time
-now_ph = datetime.now(ph_tz)
-
-formatted_datentime = now_ph.strftime("%Y-%m-%d %H:%M:%S")
 
 @token_required
-def process_access(system_key, userId, emailAddress, OASId, modules, fields_value):
+def process_access(
+    system_key,
+    userId,
+    emailAddress,
+    OASId,
+    modules,
+    fields_value
+):
     try:
+
+        # ====================================================
+        # Current Philippine date/time
+        # ====================================================
+
+        now_ph = datetime.now(ph_tz)
+
+        formatted_datentime = now_ph.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        # ====================================================
+        # Current logged-in user
+        # ====================================================
+
+        current_username = g.payload["username"]
+
+        # ====================================================
+        # Get system configuration
+        # ====================================================
+
+        system = SystemProfile.query.filter(
+            SystemProfile.SystemAlias == system_key
+        ).first()
+
+        if not system:
+            return {
+                "success": False,
+                "message": (
+                    f"System configuration not found "
+                    f"for {system_key}."
+                )
+            }
+
+        tableName = system.DBTableName
+        user_col = system.DBTableIdentifier
+
+        # ====================================================
+        # Get employee information
+        # ====================================================
+
+        user = vwAtKWE.query.filter(
+            vwAtKWE.EmployeeId == userId
+        ).first()
+
+        if not user:
+            return {
+                "success": False,
+                "message": (
+                    f"Employee {userId} not found."
+                )
+            }
+
+        # ====================================================
+        # Convert modules list to dictionary
+        #
+        # Example:
+        #
+        # modules =
+        # [
+        #     {"ModuleName": "ModuleA"},
+        #     {"ModuleName": "ModuleB"}
+        # ]
+        #
+        # becomes:
+        #
+        # {
+        #     "ModuleA": 1,
+        #     "ModuleB": 1
+        # }
+        # ====================================================
+
+        module_data = {
+            module["ModuleName"]: 1
+            for module in modules
+        }
+
+        # ====================================================
+        # DATABASE CONFIGURATION
+        # ====================================================
+
         bind_map = current_app.config["SYSTEM_BIND_MAP"]
 
-        current_username = g.payload['username']
-        # Get system table config
-        system = SystemProfile.query.filter(SystemProfile.SystemAlias == system_key).first()
-        if system:
-            tableName = system.DBTableName
-            user_col = system.DBTableIdentifier
+        # ----------------------------------------------------
+        # MSSQL
+        # ----------------------------------------------------
+
+        if system.DBType == "MSSQL":
+
             bind = bind_map.get(system_key)
-            engine = db.get_engine(current_app, bind=bind)
 
+            engine = db.get_engine(
+                current_app,
+                bind=bind
+            )
 
-            # Get user info
-            user = vwAtKWE.query.filter(vwAtKWE.EmployeeId == userId).first()
-            if user:
-                FullName = user.FullName
+            def quote_column(column):
+                return f"[{column}]"
 
-            #if type is MSSQL
-            if system.DBType == "MSSQL":
-                query = f"""
-                    SELECT *
-                    FROM {tableName}
-                    WHERE OASId = :user_id
-                """
+        # ----------------------------------------------------
+        # MySQL
+        # ----------------------------------------------------
 
-                with engine.connect() as conn:
-                    result = conn.execute(text(query), {"user_id": OASId}).fetchone()
-                    if result:
-                        module_data = {
-                            module["ModuleName"]: 1
-                            for module in modules
-                        }
+        elif system.DBType == "MySQL":
 
-                        update_data = { **module_data, "user_id": OASId }
+            # Encode password in case it contains
+            # special characters such as:
+            #
+            # @ # $ % & /
+            #
+            mysql_password = quote_plus(
+                system.DBPassword
+            )
 
-                        set_clause = ", ".join(
-                            [f"[{col}] = :{col}" for col in module_data.keys()]
-                        )
+            engine = create_engine(
+                f"mysql+pymysql://"
+                f"{system.DBUsername}:"
+                f"{mysql_password}@"
+                f"{system.DBServerName}/"
+                f"{system.DBName}"
+            )
 
-                        query = text(f"""
-                            UPDATE {tableName}
-                            SET {set_clause}
-                            WHERE OASId = :user_id
-                        """)
+            def quote_column(column):
+                return f"`{column}`"
 
-                        with engine.begin() as conn:
-                            conn.execute(query, update_data)
+        # ----------------------------------------------------
+        # Unsupported database type
+        # ----------------------------------------------------
 
-                        return {
-                            "success": True,
-                            "action": "update",
-                            "message": f"{system_key} account updated successfully."
-                        }
-                    else:
-                        
-                        #---------------------------------------I-LOG--------------------------------------------#
-                        if system_key == "I-LOG":
-                            ilog_name = user.CompleteName.title()
-                            if user.Company == 'KWE Philippines':
-                                company = "KINTETSU WORLD EXPRESS (PHILIPPINES) INC."
-                            else:
-                                company = user.Company
+        else:
 
-                            areadept = f"{user.Area} - {user.Department}"
-                            userGroup = "User"
+            return {
+                "success": False,
+                "message": (
+                    f"Unsupported database type: "
+                    f"{system.DBType}"
+                )
+            }
 
-                            insert_data = {
-                                "EmailAddress": emailAddress,
-                                "EmployeeId": userId,
-                                "FullName": ilog_name,
-                                "Designation": user.Designation,
-                                "Company": company, 
-                                "Area": user.Area,
-                                "Department": user.Department,
-                                "AreaDepartment": areadept, 
-                                "UserGroup": userGroup,
-                                "Status": 1,
-                                "CreatedBy": current_username,
-                                "CreatedDate": formatted_datentime,
-                                "OASId": OASId,
-                                **modules
-                            }
+        # ====================================================
+        # CHECK IF ACCOUNT ALREADY EXISTS
+        # ====================================================
 
-                        #----------------------------------------LOGMI----------------------------------------------#
-                        elif system_key == "LOGMI":
-                            logmi_name = user.CompleteName.title()
-                            if user.Company == 'KWE Philippines':
-                                company = "Kintetsu World Express (Philippines) Inc."
-                            else:
-                                company = user.Company
+        query = text(f"""
+            SELECT 1
+            FROM {tableName}
+            WHERE {quote_column("OASId")} = :user_id
+        """)
 
-                            userGroup = "User"
+        with engine.connect() as conn:
 
-                            module_data = {
-                                module["ModuleName"]: 1
-                                for module in modules
-                            }
+            result = conn.execute(
+                query,
+                {
+                    "user_id": OASId
+                }
+            ).fetchone()
 
-                            groups = [
-                                "whse",
-                                "rep",
-                                "transct",
-                                "trans",
-                                "pod",
-                                "misc",
-                                "config",
-                            ]
+        # ====================================================
+        # UPDATE EXISTING ACCOUNT
+        # ====================================================
 
-                            for group in groups:
-                                if any(module["ModuleName"].lower().startswith(group) for module in modules):
-                                    module_data[group] = 1
+        if result:
 
-                            insert_data = {
-                                "EmailAddress": emailAddress,
-                                "FullName": logmi_name,
-                                "Company": company, 
-                                "Designation": user.Designation,
-                                "UserGroup": userGroup,
-                                "Status": 1,
-                                "CreatedBy": current_username,
-                                "CreatedDate": formatted_datentime,
-                                "OASId": OASId,
-                                **module_data
-                            }
+            # ------------------------------------------------
+            # If there are no modules, nothing to update
+            # ------------------------------------------------
 
-                        #------------------------------------------AccSys------------------------------------------------#
-                        elif system_key == "AccSys":
-                            accsys_name = user.CompleteName
-                            company = user.Company
-                            area = user.Area.title()
+            if not module_data:
 
-                            if "UserLevel" in fields_value:
-                                userLevel = fields_value["UserLevel"]
-                            else:
-                                userLevel = None
+                return {
+                    "success": True,
+                    "action": "update",
+                    "message": (
+                        f"{system_key} account already exists. "
+                        f"No modules to update."
+                    )
+                }
 
-                            if "UserAllowedCA" in fields_value:
-                                allowedCA = fields_value["UserAllowedCA"]
-                            else:
-                                allowedCA = None
+            # ------------------------------------------------
+            # Prepare update data
+            # ------------------------------------------------
 
-                            userGroup = "User"
+            update_data = {
+                **module_data,
+                "user_id": OASId
+            }
 
-                            insert_data = {
-                                "EmailAddress": emailAddress,
-                                "FullName": accsys_name,
-                                "Designation": user.Designation,
-                                "UserLevel": userLevel,
-                                "Company": company, 
-                                "Department": user.Department,
-                                "ImmediateSuperior": user.ImmediateSupervisor,
-                                "DepartmentHead": user.DepartmentHead,
-                                "Area": area,
-                                "UserGroup": userGroup,
-                                "AllowedCAAmount": allowedCA,
-                                "Status": 1,
-                                "CreatedBy": current_username,
-                                "CreatedDate": formatted_datentime,
-                                "OASId": OASId,
-                                **modules
-                            }
+            # ------------------------------------------------
+            # Build SET clause
+            # ------------------------------------------------
 
-                        #---------------------------------------------TIPISIMS------------------------------------------------------#
-                        elif system_key == "TIPISIMS":
-                            sims_name = user.CompleteName.title()
-                            
-                            if user.Company == 'KWE Philippines':
-                                company = "Kintetsu World Express (Philippines) Inc."
-                            else:
-                                company = user.Company
+            set_clause = ", ".join(
+                f"{quote_column(col)} = :{col}"
+                for col in module_data.keys()
+            )
 
+            query = text(f"""
+                UPDATE {tableName}
+                SET {set_clause}
+                WHERE {quote_column("OASId")} = :user_id
+            """)
 
-                            if "XId" in fields_value:
-                                xId = fields_value["XId"]
-                            else:
-                                xId = None
+            with engine.begin() as conn:
 
-                            if "Department" in fields_value:
-                                dept = fields_value["Department"]
-                            else:
-                                dept = user.Department
+                conn.execute(
+                    query,
+                    update_data
+                )
 
-                            userGroup = "User"
+            return {
+                "success": True,
+                "action": "update",
+                "message": (
+                    f"{system_key} account "
+                    f"updated successfully."
+                )
+            }
 
-                            insert_data = {
-                                "EmployeeId": userId,
-                                "XId": xId,
-                                "Username": xId,
-                                "FullName": sims_name,
-                                "Designation": user.Designation,
-                                "Company": company, 
-                                "Department": dept,
-                                "UserGroup": userGroup,
-                                "Active": 1,
-                                "CreatedBy": current_username,
-                                "OASId": OASId,
-                                **modules
-                            }
+        # ====================================================
+        # INSERT NEW ACCOUNT
+        # ====================================================
 
-                        #---------------------------------------------EAS-------------------------------------------------#
-                        elif system_key == "EAS":
-                            eas_name = user.CompleteName.title()
-                            userGroup = "Administrator"
+        insert_data = {}
 
-                            insert_data = {
-                                "Email_Address": emailAddress,
-                                "Full_Name": eas_name,
-                                "Designation": user.Designation,
-                                "UserGroup": userGroup,
-                                "Active": 1,
-                                "CreatedBy": current_username,
-                                "CreatedDate": formatted_datentime,
-                                "OASId": OASId,
-                            }
+        # ====================================================
+        # I-LOG
+        # ====================================================
 
-                        #---------------------------------------------BILLSYS-----------------------------------------------------#
-                        elif system_key == "BillSys":
-                            billsys_name = user.CompleteName
-                            company = user.Company
-                            area = user.Area.title()
+        if system_key == "I-LOG":
 
-                            userGroup = "User"
-                            stat = "Active"
+            ilog_name = user.CompleteName.title()
 
-                            insert_data = {
-                                "EmailAddress": emailAddress,
-                                "FullName": billsys_name,
-                                "Designation": user.Designation,
-                                "Company": company, 
-                                "Department": user.Department,
-                                "Area": area,
-                                "UserGroup": userGroup,
-                                "Status": stat,
-                                "CreatedBy": current_username,
-                                "CreatedDate": formatted_datentime,
-                                "OASId": OASId,
-                                **modules
-                            }
+            if user.Company == "KWE Philippines":
 
-                        columns = ", ".join(f"[{c}]" for c in insert_data.keys())
-                        values = ", ".join(f":{c}" for c in insert_data.keys())
+                company = (
+                    "KINTETSU WORLD EXPRESS "
+                    "(PHILIPPINES) INC."
+                )
 
-                        query = text(f"""
-                            INSERT INTO {tableName}
-                            ({columns})
-                            VALUES ({values})
-                        """)
+            else:
 
-                        with engine.begin() as conn:
-                            conn.execute(query, insert_data)
+                company = user.Company
 
-                        return {
-                            "success": True,
-                            "action": "insert",
-                            "message": f"{system_key} account inserted successfully."
-                        }
+            areadept = (
+                f"{user.Area} - "
+                f"{user.Department}"
+            )
+
+            userGroup = "User"
+
+            insert_data = {
+
+                "EmailAddress": emailAddress,
+
+                "EmployeeId": userId,
+
+                "FullName": ilog_name,
+
+                "Designation": user.Designation,
+
+                "Company": company,
+
+                "Area": user.Area,
+
+                "Department": user.Department,
+
+                "AreaDepartment": areadept,
+
+                "UserGroup": userGroup,
+
+                "Status": 1,
+
+                "CreatedBy": current_username,
+
+                "CreatedDate": formatted_datentime,
+
+                "OASId": OASId,
+
+                **module_data
+            }
+
+        # ====================================================
+        # LOGMI
+        # ====================================================
+
+        elif system_key == "LOGMI":
+
+            logmi_name = user.CompleteName.title()
+
+            if user.Company == "KWE Philippines":
+
+                company = (
+                    "Kintetsu World Express "
+                    "(Philippines) Inc."
+                )
+
+            else:
+
+                company = user.Company
+
+            userGroup = "User"
+
+            # -----------------------------------------------
+            # Copy module_data so we can add group columns
+            # -----------------------------------------------
+
+            logmi_module_data = {
+                **module_data
+            }
+
+            # -----------------------------------------------
+            # LOGMI module groups
+            # -----------------------------------------------
+
+            groups = [
+                "whse",
+                "rep",
+                "transct",
+                "trans",
+                "pod",
+                "misc",
+                "config",
+            ]
+
+            for group in groups:
+
+                if any(
+                    module["ModuleName"]
+                    .lower()
+                    .startswith(group)
+                    for module in modules
+                ):
+
+                    logmi_module_data[group] = 1
+
+            insert_data = {
+
+                "EmailAddress": emailAddress,
+
+                "FullName": logmi_name,
+
+                "Company": company,
+
+                "Designation": user.Designation,
+
+                "UserGroup": userGroup,
+
+                "Status": 1,
+
+                "CreatedBy": current_username,
+
+                "CreatedDate": formatted_datentime,
+
+                "OASId": OASId,
+
+                **logmi_module_data
+            }
+
+        # ====================================================
+        # ACCSYS
+        # ====================================================
+
+        elif system_key == "AccSys":
+
+            accsys_name = user.CompleteName
+
+            company = user.Company
+
+            area = user.Area.title()
+
+            userLevel = fields_value.get(
+                "UserLevel"
+            )
+
+            allowedCA = fields_value.get(
+                "UserAllowedCA"
+            )
+
+            userGroup = "User"
+
+            insert_data = {
+
+                "EmailAddress": emailAddress,
+
+                "FullName": accsys_name,
+
+                "Designation": user.Designation,
+
+                "UserLevel": userLevel,
+
+                "Company": company,
+
+                "Department": user.Department,
+
+                "ImmediateSuperior": (
+                    user.ImmediateSupervisor
+                ),
+
+                "DepartmentHead": (
+                    user.DepartmentHead
+                ),
+
+                "Area": area,
+
+                "UserGroup": userGroup,
+
+                "AllowedCAAmount": allowedCA,
+
+                "Status": 1,
+
+                "CreatedBy": current_username,
+
+                "CreatedDate": formatted_datentime,
+
+                "OASId": OASId,
+
+                **module_data
+            }
+
+        # ====================================================
+        # TIPISIMS
+        # ====================================================
+
+        elif system_key == "TIPISIMS":
+
+            sims_name = user.CompleteName.title()
+
+            if user.Company == "KWE Philippines":
+
+                company = (
+                    "Kintetsu World Express "
+                    "(Philippines) Inc."
+                )
+
+            else:
+
+                company = user.Company
+
+            xId = fields_value.get(
+                "XId"
+            )
+
+            dept = fields_value.get(
+                "Department",
+                user.Department
+            )
+
+            userGroup = "User"
+
+            insert_data = {
+
+                "EmployeeId": userId,
+
+                "XId": xId,
+
+                "Username": xId,
+
+                "FullName": sims_name,
+
+                "Designation": user.Designation,
+
+                "Company": company,
+
+                "Department": dept,
+
+                "UserGroup": userGroup,
+
+                "Active": 1,
+
+                "CreatedBy": current_username,
+
+                "OASId": OASId,
+
+                **module_data
+            }
+
+        # ====================================================
+        # EAS
+        # ====================================================
+
+        elif system_key == "EAS":
+
+            eas_name = user.CompleteName.title()
+
+            userGroup = "Administrator"
+
+            insert_data = {
+
+                "Email_Address": emailAddress,
+
+                "Full_Name": eas_name,
+
+                "Designation": user.Designation,
+
+                "UserGroup": userGroup,
+
+                "Active": 1,
+
+                "CreatedBy": current_username,
+
+                "CreatedDate": formatted_datentime,
+
+                "OASId": OASId,
+            }
+
+        # ====================================================
+        # BILLSYS
+        # ====================================================
+
+        elif system_key == "BillSys":
+
+            billsys_name = user.CompleteName
+
+            company = user.Company
+
+            area = user.Area.title()
+
+            userGroup = "User"
+
+            stat = "Active"
+
+            insert_data = {
+
+                "EmailAddress": emailAddress,
+
+                "FullName": billsys_name,
+
+                "Designation": user.Designation,
+
+                "Company": company,
+
+                "Department": user.Department,
+
+                "Area": area,
+
+                "UserGroup": userGroup,
+
+                "Status": stat,
+
+                "CreatedBy": current_username,
+
+                "CreatedDate": formatted_datentime,
+
+                "OASId": OASId,
+
+                **module_data
+            }
+
+        # ====================================================
+        # UNKNOWN SYSTEM
+        # ====================================================
+
+        else:
+
+            return {
+                "success": False,
+                "message": (
+                    f"Unsupported system key: "
+                    f"{system_key}"
+                )
+            }
+
+        # ====================================================
+        # BUILD INSERT QUERY
+        # ====================================================
+
+        columns = ", ".join(
+            quote_column(column)
+            for column in insert_data.keys()
+        )
+
+        values = ", ".join(
+            f":{column}"
+            for column in insert_data.keys()
+        )
+
+        query = text(f"""
+            INSERT INTO {tableName}
+            ({columns})
+            VALUES ({values})
+        """)
+
+        # ====================================================
+        # EXECUTE INSERT
+        # ====================================================
+
+        with engine.begin() as conn:
+
+            conn.execute(
+                query,
+                insert_data
+            )
+
+        # ====================================================
+        # SUCCESS
+        # ====================================================
+
+        return {
+            "success": True,
+            "action": "insert",
+            "message": (
+                f"{system_key} account "
+                f"inserted successfully."
+            )
+        }
+
+    # ========================================================
+    # ERROR HANDLING
+    # ========================================================
+
     except Exception as ex:
-        print("=== ERROR PROCESSING TICKET ===")
+
+        print(
+            "=== ERROR PROCESSING ACCESS ==="
+        )
+
         traceback.print_exc()
+
         return {
             "success": False,
             "message": str(ex),
             "traceback": traceback.format_exc()
         }
-
-        
-    
